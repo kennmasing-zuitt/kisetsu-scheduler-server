@@ -1,7 +1,6 @@
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import { z } from 'zod';
 import { env } from '../../core/config/env.js';
-import { RoleKey } from '../../mods/users/db/_users.enum.js';
 import { UnauthenticatedError } from '../errors/AppError.js';
 import type { AccessTokenClaims } from './auth.types.js';
 
@@ -11,26 +10,47 @@ const ALGORITHM = 'HS256' as const;
 interface TokenSubject {
     id: string;
     tokenVersion?: number | null;
-    roles: { key: RoleKey }[];
+    role?: string | null;
 }
 
-/** Signs `{ sub: user.id, ver: user.tokenVersion, roles }`, expiring after JWT_EXPIRES_IN. */
-export function signAccessToken(user: TokenSubject): string {
-    const claims: AccessTokenClaims = {
-        sub: user.id,
-        ver: user.tokenVersion ?? 0,
-        roles: user.roles.map((r) => r.key),
-    };
-    return jwt.sign(claims, env.JWT_SECRET, {
+const baseClaims = (user: TokenSubject): AccessTokenClaims => ({
+    sub: user.id,
+    ver: user.tokenVersion ?? 0,
+    role: user.role ?? undefined,
+});
+
+const sign = (claims: AccessTokenClaims, expiresIn: string) =>
+    jwt.sign(claims, env.JWT_SECRET, {
         algorithm: ALGORITHM,
-        expiresIn: env.JWT_EXPIRES_IN as SignOptions['expiresIn'],
+        expiresIn: expiresIn as SignOptions['expiresIn'],
     });
+
+/** Signs `{ sub: user.id, ver: user.tokenVersion, role }`, expiring after JWT_EXPIRES_IN. */
+export function signAccessToken(user: TokenSubject): string {
+    return sign(baseClaims(user), env.JWT_EXPIRES_IN);
+}
+
+/**
+ * Signs a token that acts as `target`, with `act: { sub: admin.id, ver: admin.tokenVersion }`,
+ * expiring after IMPERSONATION_TOKEN_TTL. verifyToken re-checks the admin on every request.
+ */
+export function signImpersonationToken(
+    target: TokenSubject,
+    admin: TokenSubject,
+): { token: string; expiresAt: Date } {
+    const token = sign(
+        { ...baseClaims(target), act: { sub: admin.id, ver: admin.tokenVersion ?? 0 } },
+        env.IMPERSONATION_TOKEN_TTL,
+    );
+    const { exp } = jwt.decode(token) as { exp: number };
+    return { token, expiresAt: new Date(exp * 1000) };
 }
 
 const ClaimsSchema = z.object({
     sub: z.string().min(1),
     ver: z.number().int().nonnegative(),
-    roles: z.array(z.enum(RoleKey)).default([]),
+    role: z.string().optional(),
+    act: z.object({ sub: z.string().min(1), ver: z.number().int().nonnegative() }).optional(),
 });
 
 /**

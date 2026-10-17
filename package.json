@@ -21,6 +21,7 @@
         "format:check": "prettier --check .",
         "seed": "tsx --env-file=.env src/scripts/seed.ts",
         "seed:reset": "tsx --env-file=.env src/scripts/seed.ts --reset",
+        "migrate:access": "tsx --env-file=.env src/scripts/migrateAccess.ts",
         "schema:print": "NODE_ENV=development tsx src/scripts/printSchema.ts"
     },
     "repository": {

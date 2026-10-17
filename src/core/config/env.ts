@@ -19,6 +19,8 @@ export const env = cleanEnv(process.env, {
         devDefault: 'dev-only-secret-change-me-0123456789abcdef',
     }),
     JWT_EXPIRES_IN: str({ default: '1h' }),
+    // Lifetime of tokens issued by impersonateUser (short on purpose)
+    IMPERSONATION_TOKEN_TTL: str({ default: '15m' }),
     BCRYPT_SALT_ROUNDS: num({ default: 10 }),
     CORS_ORIGINS: commaList({ devDefault: ['http://localhost:5173'] }),
     AUTH_RATE_LIMIT_MAX: num({ default: 5, devDefault: 50 }),

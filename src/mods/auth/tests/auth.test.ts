@@ -24,13 +24,13 @@ const me = (token?: string) =>
     gql<{ me: { id: string; email: string } }>(ME_QUERY, undefined, token ? bearer(token) : {});
 
 describe('token versioning', () => {
-    it('signs { sub, ver, roles } with HS256 and an expiry from JWT_EXPIRES_IN', async () => {
+    it('signs { sub, ver, role } with HS256 and an expiry from JWT_EXPIRES_IN', async () => {
         const { user, token } = await registerTestUser();
         const header = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString());
         const claims = jwt.decode(token) as jwt.JwtPayload;
 
         expect(header.alg).toBe('HS256');
-        expect(claims).toMatchObject({ sub: user.id, ver: 0, roles: ['user'] });
+        expect(claims).toMatchObject({ sub: user.id, ver: 0, role: 'user' });
         expect(claims.exp! - claims.iat!).toBe(60 * 60); // JWT_EXPIRES_IN=1h
     });
 
@@ -52,14 +52,14 @@ describe('token versioning', () => {
     it('rejects expired, tampered, wrong-algorithm and malformed tokens with 401', async () => {
         const { user } = await registerTestUser();
         const expired = jwt.sign(
-            { sub: user.id, ver: 0, roles: ['user'], exp: Math.floor(Date.now() / 1000) - 10 },
+            { sub: user.id, ver: 0, role: 'user', exp: Math.floor(Date.now() / 1000) - 10 },
             env.JWT_SECRET,
         );
-        const wrongSecret = jwt.sign({ sub: user.id, ver: 0, roles: ['user'] }, 'x'.repeat(40));
-        const hs512 = jwt.sign({ sub: user.id, ver: 0, roles: ['user'] }, env.JWT_SECRET, {
+        const wrongSecret = jwt.sign({ sub: user.id, ver: 0, role: 'user' }, 'x'.repeat(40));
+        const hs512 = jwt.sign({ sub: user.id, ver: 0, role: 'user' }, env.JWT_SECRET, {
             algorithm: 'HS512',
         });
-        const unsigned = jwt.sign({ sub: user.id, ver: 0, roles: ['user'] }, '', {
+        const unsigned = jwt.sign({ sub: user.id, ver: 0, role: 'user' }, '', {
             algorithm: 'none',
         });
 

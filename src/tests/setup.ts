@@ -1,8 +1,9 @@
 // Runs before every test file (see setupFiles in vitest.config.ts).
 import 'reflect-metadata';
 import mongoose from 'mongoose';
-import { beforeAll, afterEach, afterAll } from 'vitest';
+import { beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 import { connectDB, disconnectDB } from '../core/loaders/connectToMongo.js';
+import { RolesImpl } from '../mods/roles/index.js';
 
 beforeAll(async () => {
     // Safety guard: tests delete data, so never run them against a real database
@@ -14,6 +15,11 @@ beforeAll(async () => {
     }
     // Make sure unique indexes (e.g. User.email) exist before tests rely on them
     await Promise.all(Object.values(mongoose.models).map((m) => m.init()));
+});
+
+beforeEach(async () => {
+    // Same as server start: the system roles (super-admin, user) always exist
+    await RolesImpl.ensureSystemRoles();
 });
 
 afterEach(async () => {

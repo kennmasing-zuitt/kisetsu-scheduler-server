@@ -1,5 +1,5 @@
 import { Arg, Authorized, Mutation, Resolver, UseMiddleware } from 'type-graphql';
-import { CurrentUser } from '../../../../core/graphql/auth.js';
+import { CurrentUser, DenyImpersonation } from '../../../../core/graphql/auth.js';
 import { RateLimit } from '../../../../core/graphql/middleware/rateLimit.js';
 import { authLimiter } from '../../../../core/middleware/rateLimit.js';
 import type { AuthUser } from '../../../../shared/auth/auth.types.js';
@@ -12,6 +12,7 @@ import * as AuthImpl from '../../service/index.js';
 @Resolver()
 export class ChangePasswordHandler {
     @Authorized()
+    @UseMiddleware(DenyImpersonation) // an admin must never do this on a user's behalf
     @Mutation(() => AuthPayloadObject, {
         description:
             'Requires the current password (403 WRONG_PASSWORD otherwise). Signs out every other ' +

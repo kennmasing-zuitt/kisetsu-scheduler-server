@@ -1,16 +1,15 @@
-import { InferSchemaType, Types } from 'mongoose';
-import { UserModel, UserSchema } from './user.model.js';
+import type { InferSchemaType, Types } from 'mongoose';
+import type { Permission } from '../../roles/index.js';
+import type { UserModel, UserSchema } from './user.model.js';
 
 // Stored shape (includes createdAt/updatedAt from `timestamps: true`)
-export type User = InferSchemaType<typeof UserSchema> & {
+export type User = Omit<InferSchemaType<typeof UserSchema>, 'extraPerms'> & {
     _id: Types.ObjectId;
+    extraPerms: Permission[];
 };
 
 // What queries return: User + _id + methods like comparePassword
 export type UserDocument = InstanceType<typeof UserModel>;
-
-// One entry in user.roles
-export type UserRole = User['roles'][number];
 
 // Input for operations.create; the password is already hashed by AuthImpl.register
 export type CreateUserData = Pick<User, 'name' | 'email' | 'password'>;

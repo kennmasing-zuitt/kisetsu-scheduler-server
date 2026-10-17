@@ -8,7 +8,7 @@ interface RegisterData {
     register: {
         message: string;
         token: string;
-        user: { id: string; name: string; email: string; roles: { key: string }[] };
+        user: { id: string; name: string; email: string; role: { key: string } };
     };
 }
 
@@ -23,7 +23,7 @@ describe('mutation register', () => {
         expect(res.body.data?.register.user).toMatchObject({
             name: testUser.name,
             email: testUser.email,
-            roles: [{ key: 'user' }],
+            role: { key: 'user' },
         });
 
         const stored = await UserModel.findOne({ email: testUser.email }).select('+password');
