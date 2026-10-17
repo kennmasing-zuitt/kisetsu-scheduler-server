@@ -27,6 +27,9 @@ export const UserSchema = new Schema(
             type: [UserRoleSchema],
             default: () => [{ key: RoleKey.user }],
         },
+        // Copied into every access token as `ver`. Incrementing it (logout, password change)
+        // revokes every token issued before, on every device.
+        tokenVersion: { type: Number, default: 0 },
     },
     {
         collection: 'User',

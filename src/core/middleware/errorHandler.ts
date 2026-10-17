@@ -1,4 +1,5 @@
-// Catches errors raised OUTSIDE GraphQL execution (CORS, malformed JSON, body too large, ...).
+// Catches errors raised OUTSIDE GraphQL execution (CORS, malformed JSON, body too large,
+// invalid/expired/revoked token from verifyToken, ...).
 // Errors thrown inside resolvers are shaped by core/graphql/formatError.ts instead.
 import type { Request, Response, NextFunction } from 'express';
 import { AppError } from '../../shared/errors/AppError.js';
@@ -11,7 +12,7 @@ interface HttpError extends Error {
 }
 
 const send = (res: Response, status: number, code: string, message: string) => {
-    res.status(status).json({ errors: [{ message, extensions: { code } }] });
+    res.status(status).json({ errors: [{ message, extensions: { code, status } }] });
 };
 
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {

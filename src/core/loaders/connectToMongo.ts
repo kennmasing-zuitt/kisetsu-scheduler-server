@@ -1,10 +1,14 @@
 import mongoose from 'mongoose';
 import { env } from '../config/env.js';
-import { logger } from '../logger.js';
+import { logger, redact } from '../logger.js';
 
 export async function connectDB(): Promise<void> {
     if (env.isDevelopment) {
-        mongoose.set('debug', true);
+        // Log queries through winston with password hashes / tokens redacted
+        // (the default debug printer would print `$set: { password: '<hash>' }`)
+        mongoose.set('debug', (collection: string, method: string, ...args: unknown[]) => {
+            logger.debug(`Mongoose: ${collection}.${method}`, { args: redact(args) });
+        });
     }
     mongoose.connection.on('connected', () => {
         const { host, port, name } = mongoose.connection;

@@ -52,7 +52,11 @@ async function seedUser(u: SeedUser): Promise<'created' | 'skipped'> {
 
     // Same path as a real sign-up, so hashing, defaults and rules all apply
     try {
-        const user = await AuthImpl.register(u.name, u.email, u.password);
+        const { user } = await AuthImpl.register({
+            name: u.name,
+            email: u.email,
+            password: u.password,
+        });
         // register() gives every new user the default role; apply extra roles here
         await UsersImpl.setRoles(user.id, u.roles);
         return 'created';
