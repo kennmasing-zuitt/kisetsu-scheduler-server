@@ -3,6 +3,9 @@
 //   import * as AuthImpl from '<path>/service/index.js';
 export * from './impl/changePassword.js';
 export * from './impl/getMe.js';
+export * from './impl/getSession.js';
+export * from './impl/impersonateUser.js';
 export * from './impl/login.js';
 export * from './impl/logout.js';
+export * from './impl/logoutUser.js';
 export * from './impl/register.js';

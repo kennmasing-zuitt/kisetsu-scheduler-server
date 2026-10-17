@@ -1,15 +1,6 @@
 import { model, Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
-import { ROLE_KEY_VALUES, RoleKey } from './_users.enum.js';
-
-const UserRoleSchema = new Schema({
-    key: {
-        type: String,
-        required: true,
-        enum: ROLE_KEY_VALUES,
-        default: RoleKey.user,
-    },
-});
+import { DEFAULT_ROLE_KEY, PERMISSION_VALUES } from '../../roles/index.js';
 
 export const UserSchema = new Schema(
     {
@@ -23,10 +14,18 @@ export const UserSchema = new Schema(
         },
         // select: false -> never loaded unless a query asks for '+password'
         password: { type: String, required: true, select: false },
-        roles: {
-            type: [UserRoleSchema],
-            default: () => [{ key: RoleKey.user }],
+        // Key of a Role document (see mods/roles). The role carries the permissions.
+        role: {
+            type: String,
+            required: true,
+            lowercase: true,
+            trim: true,
+            default: DEFAULT_ROLE_KEY,
+            index: true,
         },
+        // Per-user grants on top of the role's permissions (admin permissions only apply to
+        // users with an admin-kind role). Checked on every request, so changes apply immediately.
+        extraPerms: { type: [String], enum: PERMISSION_VALUES, default: [] },
         // Copied into every access token as `ver`. Incrementing it (logout, password change)
         // revokes every token issued before, on every device.
         tokenVersion: { type: Number, default: 0 },

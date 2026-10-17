@@ -14,7 +14,7 @@ export function buildSchema() {
         scalarsMap: [{ type: Date, scalar: DateTimeScalar }],
         // Input rules live in Zod schemas (see shared/validation.ts), not class-validator
         validate: false,
-        // Enables @Authorized() / @Authorized(RoleKey.appAdmin) on resolvers
+        // Enables @Authorized() / @Authorized(Permission.readUsers) on resolvers
         authChecker,
     });
 }

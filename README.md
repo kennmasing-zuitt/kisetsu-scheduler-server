@@ -9,7 +9,7 @@ query or mutation served from a single endpoint, `POST /graphql`.
 ```bash
 npm install
 cp .env.example .env            # then edit MONGO_URI etc.
-npm run seed                    # optional: admin@example.com / user@example.com
+npm run seed                    # roles + a super admin, support admin and regular user
 npm run dev                     # http://localhost:3000/graphql
 ```
 
@@ -26,7 +26,14 @@ introspection.
 | —                                    | `query me` (auth)                                             |
 | —                                    | `mutation changePassword(input: ChangePasswordInput!)` (auth) |
 | —                                    | `mutation logout` (auth)                                      |
-| `GET  /api/v1/users?page=&limit=`    | `query users(page: Int, limit: Int)`                          |
+| —                                    | `query session` (auth)                                        |
+| —                                    | `mutation logoutUser(userId: ID!)` (logoutUsers)              |
+| —                                    | `mutation impersonateUser(userId, reason)` (impersonateUsers) |
+| —                                    | `mutation setUserAccess(userId, input)` (manageUserAccess)    |
+| —                                    | `query roles` / `role(key)` (readRoles)                       |
+| —                                    | `mutation createRole / updateRole / deleteRole` (manageRoles) |
+| —                                    | `query auditLogs(...)` (readAuditLogs)                        |
+| `GET  /api/v1/users?page=&limit=`    | `query users(page: Int, limit: Int)` (readUsers)              |
 | `GET  /api/v1/example/readExample`   | `query examples(page: Int, limit: Int)`                       |
 | —                                    | `query example(id: ID!)`                                      |
 | `POST /api/v1/example/createExample` | `mutation createExample(input: CreateExampleInput!)`          |
@@ -40,7 +47,7 @@ Print the whole schema with `npm run schema:print` (or `npm run schema:print -- 
 
 ```bash
 curl -s localhost:3000/graphql -H 'Content-Type: application/json' -d '{
-  "query": "mutation ($input: RegisterInput!) { register(input: $input) { message user { id email roles { key } } } }",
+  "query": "mutation ($input: RegisterInput!) { register(input: $input) { message token user { id email role { key perms } } } }",
   "variables": { "input": { "name": "Kenn", "email": "kenn@example.com", "password": "Password123!" } }
 }'
 ```
@@ -63,17 +70,22 @@ towards `AUTH_RATE_LIMIT_MAX` (5 per 15 min in `.env.example`), so a second run 
 gets `TOO_MANY_REQUESTS`. For local testing set `AUTH_RATE_LIMIT_MAX=50` in `.env`, or restart the
 dev server to reset the counter.
 
+The Users, Example, Roles and Admin folders log in as the seeded accounts, so run `npm run seed`
+first. Only run the collection against a local or dev database: it creates and deletes a role and
+signs the test user out.
+
 ## Authentication
 
 JWT access tokens (HS256), sent as `Authorization: Bearer <token>`.
 
-| Operation               | Auth | Returns                    | Errors                                                      |
-| ----------------------- | ---- | -------------------------- | ----------------------------------------------------------- |
-| `register(input)`       | no   | `{ message, token, user }` | `EMAIL_TAKEN` 409, `VALIDATION_ERROR` 400                   |
-| `login(input)`          | no   | `{ token, user }`          | `INVALID_CREDENTIALS` 401 (unknown email or wrong password) |
-| `me`                    | yes  | `User`                     | `UNAUTHENTICATED` 401                                       |
-| `changePassword(input)` | yes  | `{ token, user }`          | `WRONG_PASSWORD` 403, `VALIDATION_ERROR` 400                |
-| `logout`                | yes  | `true`                     | `UNAUTHENTICATED` 401                                       |
+| Operation               | Auth | Returns                                    | Errors                                                      |
+| ----------------------- | ---- | ------------------------------------------ | ----------------------------------------------------------- |
+| `register(input)`       | no   | `{ message, token, user }`                 | `EMAIL_TAKEN` 409, `VALIDATION_ERROR` 400                   |
+| `login(input)`          | no   | `{ token, user }`                          | `INVALID_CREDENTIALS` 401 (unknown email or wrong password) |
+| `me`                    | yes  | `User`                                     | `UNAUTHENTICATED` 401                                       |
+| `changePassword(input)` | yes  | `{ token, user }`                          | `WRONG_PASSWORD` 403, `VALIDATION_ERROR` 400                |
+| `logout`                | yes  | `true`                                     | `UNAUTHENTICATED` 401                                       |
+| `session`               | yes  | `{ user, effectivePerms, impersonatedBy }` | `UNAUTHENTICATED` 401                                       |
 
 ```graphql
 mutation {
@@ -82,8 +94,9 @@ mutation {
         user {
             id
             email
-            roles {
+            role {
                 key
+                perms
             }
         }
     }
@@ -93,16 +106,17 @@ mutation {
 **How it works**
 
 - **Token versioning.** Each user has `tokenVersion` (starts at 0). Tokens are signed with
-  `{ sub: user.id, ver: user.tokenVersion, roles }` and expire after `JWT_EXPIRES_IN`.
+  `{ sub: user.id, ver: user.tokenVersion, role }` and expire after `JWT_EXPIRES_IN`.
 - **verifyToken** (`src/core/middleware/verifyToken.ts`) runs in front of `/graphql`. With no
   `Authorization` header the request continues anonymously. With a token, it verifies the
   signature (`algorithms: ['HS256']` only) and expiry, loads the user's current `tokenVersion`, and
   rejects the whole request with **HTTP 401** `UNAUTHENTICATED` if `ver` doesn't match. On success
-  it maps `sub` to `id` once (`req.user = { id, roles }`), which resolvers get as `ctx.user` or via
+  it maps `sub` to `id` once (`req.user = { id, role, roleKind, perms }`, with `perms` the
+  effective permissions), which resolvers get as `ctx.user` or via
   `@CurrentUser()`.
 - **Protecting a resolver:** add `@Authorized()` (any signed-in user) or
-  `@Authorized(RoleKey.appAdmin)` (role check, 403 `FORBIDDEN`), and take the caller with
-  `@CurrentUser() user: AuthUser`.
+  `@Authorized(Permission.readUsers)` (permission check, 403 `FORBIDDEN`), and take the caller
+  with `@CurrentUser() user: AuthUser`. See [Roles and permissions](#roles-and-permissions-rbac).
 - **Login** uses `findByEmailWithPassword`, the only lookup that selects the hash
   (`select: false` on the field). Unknown emails still run a bcrypt compare, so response time
   doesn't reveal which emails exist.
@@ -116,6 +130,131 @@ mutation {
   `password`, `token`, `secret`, `authorization` or `cookie`. Tokens are never put in error
   messages.
 - `register`, `login` and `changePassword` share the auth rate limiter (failed attempts only).
+
+## Roles and permissions (RBAC)
+
+Access is role-based. A **role** is a document in the `Role` collection: a named set of
+permissions. Each **user** references one role by key (`user.role`) and can have per-user
+`extraPerms` on top of it:
+
+```
+effective permissions = role.perms + user.extraPerms
+```
+
+computed in one place, `resolvePermissions()` in `src/shared/auth/permissions.ts`.
+
+- **Role kinds.** Every role is `admin` or `user` kind. Admin permissions only take effect
+  through an admin-kind role: they're dropped from user-kind roles and from the extras of users on
+  them, and the API rejects that combination.
+- **`superAdmin`** (on an admin-kind role) implies every permission.
+- **System roles** are created on startup if missing and can't be deleted: `super-admin` (holds
+  `superAdmin`; fully locked) and `user` (default for new accounts: `createExample`,
+  `updateExample`).
+- **Checked on every request.** `verifyToken` loads the user and their role and computes the
+  effective permissions, so changing a role, a user's role or their extras applies on the next
+  request, with no re-login. `query session { effectivePerms }` tells a frontend what to show.
+
+### Permissions
+
+Defined in `src/mods/roles/db/_roles.enum.ts`:
+
+| Permission         | Kind  | Allows                                   |
+| ------------------ | ----- | ---------------------------------------- |
+| `superAdmin`       | admin | Everything                               |
+| `readUsers`        | admin | `users`                                  |
+| `manageUserAccess` | admin | `setUserAccess`                          |
+| `readRoles`        | admin | `roles`, `role`                          |
+| `manageRoles`      | admin | `createRole`, `updateRole`, `deleteRole` |
+| `logoutUsers`      | admin | `logoutUser`                             |
+| `impersonateUsers` | admin | `impersonateUser`                        |
+| `readAuditLogs`    | admin | `auditLogs`                              |
+| `createExample`    | user  | `createExample`                          |
+| `updateExample`    | user  | `updateExample`                          |
+| `deleteExample`    | user  | `deleteExample`                          |
+
+**Adding a permission:** add it to `Permission` (and to `ADMIN_PERMISSIONS` or
+`USER_PERMISSIONS`), put `@Authorized(Permission.yourPerm)` on the resolver, then grant it to a
+role with `updateRole`.
+
+### Hierarchy rules
+
+Admins are ranked by what they hold. Enforced in `assertCanManageRole` and
+`UsersImpl.updateUserAccess`:
+
+1. You can only put permissions you hold into a role, or hand them out through a role assignment
+   or `extraPerms`.
+2. Only a super admin can create, edit or delete admin-kind roles, assign an admin-kind role, or
+   change an admin's access.
+3. Nobody can change their own access.
+4. `super-admin` can't be edited; system roles can't be deleted; a role still assigned to users
+   can't be deleted (`ROLE_IN_USE`, reassign them first). A role's `key` and `kind` are
+   immutable.
+5. Every change is written to the audit log with before/after values.
+
+### Seeded roles and accounts
+
+`npm run seed` creates the system roles, a custom `support` role and one account each:
+
+| Email                 | Password      | Role          | Effective permissions                                           |
+| --------------------- | ------------- | ------------- | --------------------------------------------------------------- |
+| `admin@example.com`   | `Admin123!`   | `super-admin` | all                                                             |
+| `support@example.com` | `Support123!` | `support`     | `readUsers`, `logoutUsers`, `impersonateUsers`, `readAuditLogs` |
+| `user@example.com`    | `User123!`    | `user`        | `createExample`, `updateExample`                                |
+
+### Upgrading an existing database
+
+Run `npm run migrate:access` once. It converts users from the older shapes
+(`roles: [{ key: 'appAdmin' | 'admin' | 'user' }]`, optionally with `perms`) to
+`role` + `extraPerms`, without anyone gaining or losing access:
+
+- `appAdmin`, or an admin holding `superAdmin` → `super-admin`
+- an admin with a limited permission set → a generated `migrated-admin-N` role per distinct set
+  (rename or merge them afterwards with the role mutations)
+- everyone else → `user`, with any permissions beyond the `user` role kept as `extraPerms`
+
+Migrated users' tokens are revoked. It's safe to run twice.
+
+## Admin operations
+
+| Operation                                           | Permission         | Returns                                      | Errors                                                |
+| --------------------------------------------------- | ------------------ | -------------------------------------------- | ----------------------------------------------------- |
+| `roles`, `role(key)`                                | `readRoles`        | `[Role]`, `Role`                             |                                                       |
+| `createRole(input)`                                 | `manageRoles`      | `Role`                                       | `ROLE_KEY_TAKEN` 409, `FORBIDDEN`, `VALIDATION_ERROR` |
+| `updateRole(key, input)`                            | `manageRoles`      | `Role`                                       | `SYSTEM_ROLE_LOCKED`, `FORBIDDEN`, `NOT_FOUND`        |
+| `deleteRole(key)`                                   | `manageRoles`      | `true`                                       | `ROLE_IN_USE` 409, `SYSTEM_ROLE_LOCKED`, `NOT_FOUND`  |
+| `setUserAccess(userId, { role, extraPerms })`       | `manageUserAccess` | `User`                                       | `CANNOT_MODIFY_SELF`, `FORBIDDEN`, `NOT_FOUND`        |
+| `impersonateUser(userId, reason)`                   | `impersonateUsers` | `{ token, expiresAt, user, impersonatedBy }` | `CANNOT_IMPERSONATE_ADMIN`, `NOT_FOUND`               |
+| `logoutUser(userId)`                                | `logoutUsers`      | `true`                                       | `NOT_FOUND` 404                                       |
+| `auditLogs(page, limit, action, actorId, targetId)` | `readAuditLogs`    | `AuditLogPage`                               |                                                       |
+
+All return 403 `FORBIDDEN` without the permission. Every mutation here is recorded in the audit log.
+
+### Impersonation (support access without passwords)
+
+`impersonateUser(userId, reason)` gives an admin a token that acts as a user, for support and
+debugging. There is deliberately **no master password**: access is tied to the admin's own account
+and permissions, and every session is attributable.
+
+- **Short-lived:** the token expires after `IMPERSONATION_TOKEN_TTL` (default `15m`).
+- **Tied to the admin:** the token carries `act: { sub: adminId, ver }`. On every request
+  `verifyToken` checks the admin still exists, still has the same `tokenVersion` and still holds
+  `impersonateUsers`. Change their role, or log the admin out, and the session ends at once
+  (401 "Impersonation session has ended").
+- **Revocable from the user's side:** `logoutUser` or a password change ends it too.
+- **Admins can't be impersonated**, and impersonation tokens can't call `logout`,
+  `changePassword`, `impersonateUser`, `setUserAccess` or the role mutations
+  (403 `IMPERSONATION_NOT_ALLOWED`).
+- **Audited:** the start is stored in the audit log with the required reason (5-500 chars), and
+  every request made with the token logs `Impersonated request { adminId, userId }`.
+- **Visible:** `query session { impersonatedBy { email } }` returns the admin, so a frontend can
+  show an "acting as" banner.
+
+### Signing users out
+
+`logout` signs the caller out of every device. `logoutUser(userId)` lets an admin do the same to
+someone else (compromised account, departing staff, lost device). To sign **everyone** out, for
+example after a suspected token leak, rotate `JWT_SECRET` and redeploy: every existing token
+becomes invalid with no database write.
 
 ## Errors
 
@@ -136,7 +275,8 @@ HTTP-equivalent status, so client logic written against the REST API maps over d
 ```
 
 Codes: `VALIDATION_ERROR` (Zod issues in `extensions.details`), `UNAUTHENTICATED`, `FORBIDDEN`,
-`INVALID_CREDENTIALS`, `WRONG_PASSWORD`, `NOT_FOUND`, `EMAIL_TAKEN`,
+`INVALID_CREDENTIALS`, `WRONG_PASSWORD`, `IMPERSONATION_NOT_ALLOWED`, `CANNOT_IMPERSONATE_ADMIN`,
+`CANNOT_MODIFY_SELF`, `ROLE_KEY_TAKEN`, `ROLE_IN_USE`, `SYSTEM_ROLE_LOCKED`, `NOT_FOUND`, `EMAIL_TAKEN`,
 `CONFLICT`, `INVALID_ID`, `TOO_MANY_REQUESTS`, `INTERNAL_SERVER_ERROR` (message hidden in
 production), plus Apollo's own `GRAPHQL_VALIDATION_FAILED`, `BAD_USER_INPUT`, `GRAPHQL_PARSE_FAILED`.
 
@@ -257,16 +397,18 @@ hand-written SDL.
 - Apollo's CSRF prevention is on: browsers must send `Content-Type: application/json` or the
   `apollo-require-preflight` header.
 - The `User` type has no password field, so the hash can't be selected by any query.
-- `users` is still public, as `GET /api/v1/users` was. To restrict it, add
-  `@Authorized(RoleKey.appAdmin)` to `ListUsersHandler.users`.
+- `users` requires `readUsers`; example mutations require their user permissions.
+- No shared or master passwords exist. Admin access to user accounts goes through audited,
+  short-lived impersonation tokens.
 
 ## Scripts
 
-| Script                        | What it does                                     |
-| ----------------------------- | ------------------------------------------------ |
-| `dev`                         | Watch mode with `.env`                           |
-| `build` / `start`             | Compile to `dist/` / run the compiled server     |
-| `test` / `test:run`           | Vitest (needs MongoDB; copy `.env.test.example`) |
-| `typecheck`, `lint`, `format` | The usual                                        |
-| `seed` / `seed:reset`         | Seed demo users (refuses in production)          |
-| `schema:print`                | Print the GraphQL SDL                            |
+| Script                        | What it does                                      |
+| ----------------------------- | ------------------------------------------------- |
+| `dev`                         | Watch mode with `.env`                            |
+| `build` / `start`             | Compile to `dist/` / run the compiled server      |
+| `test` / `test:run`           | Vitest (needs MongoDB; copy `.env.test.example`)  |
+| `typecheck`, `lint`, `format` | The usual                                         |
+| `seed` / `seed:reset`         | Seed demo users (refuses in production)           |
+| `migrate:access`              | One-off: old role shapes to `role` + `extraPerms` |
+| `schema:print`                | Print the GraphQL SDL                             |

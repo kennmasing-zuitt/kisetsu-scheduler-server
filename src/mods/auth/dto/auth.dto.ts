@@ -1,4 +1,5 @@
-import { Field, InputType, ObjectType } from 'type-graphql';
+import { Field, ID, InputType, ObjectType } from 'type-graphql';
+import { Permission } from '../../roles/index.js';
 import { UserObject } from '../../users/index.js';
 
 // GraphQL shapes only; the rules (trim, lowercase, email format, 8-72 chars, new != current)
@@ -49,4 +50,39 @@ export class AuthPayloadObject {
 export class RegisterPayloadObject extends AuthPayloadObject {
     @Field(() => String)
     message!: string;
+}
+
+@ObjectType('ImpersonationPayload', {
+    description:
+        'A short-lived token that acts as `user`. Send it as `Authorization: Bearer <token>`.',
+})
+export class ImpersonationPayloadObject {
+    @Field(() => String)
+    token!: string;
+
+    @Field(() => Date)
+    expiresAt!: Date;
+
+    @Field(() => UserObject, { description: 'The impersonated user' })
+    user!: UserObject;
+
+    @Field(() => ID, { description: 'The admin who started the session' })
+    impersonatedBy!: string;
+}
+
+@ObjectType('Session', { description: 'Who the current token belongs to and what it can do' })
+export class SessionObject {
+    @Field(() => UserObject)
+    user!: UserObject;
+
+    @Field(() => [Permission], {
+        description: 'Permissions that actually apply (all of them for a super admin)',
+    })
+    effectivePerms!: Permission[];
+
+    @Field(() => UserObject, {
+        nullable: true,
+        description: 'Set when an admin is impersonating this user: show a banner in the UI',
+    })
+    impersonatedBy?: UserObject | null;
 }

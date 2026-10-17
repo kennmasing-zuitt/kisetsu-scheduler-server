@@ -3,30 +3,61 @@ import 'reflect-metadata';
 import mongoose from 'mongoose';
 import { env } from '../core/config/env.js';
 import { logger } from '../core/logger.js';
-import { RoleKey, UsersImpl } from '../mods/users/index.js';
+import {
+    DEFAULT_ROLE_KEY,
+    Permission,
+    RoleKind,
+    RoleModel,
+    RolesImpl,
+    SUPER_ADMIN_ROLE_KEY,
+} from '../mods/roles/index.js';
+import { UsersImpl, UsersOperations } from '../mods/users/index.js';
 import { AuthImpl } from '../mods/auth/index.js';
 import { connectDB, disconnectDB } from '../core/loaders/connectToMongo.js';
 import { ConflictError } from '../shared/errors/AppError.js';
+
+// Custom roles (the system roles super-admin and user are created by ensureSystemRoles)
+const seedRoles = [
+    {
+        key: 'support',
+        name: 'Support',
+        description: 'Looks users up, signs them out and impersonates them to help with tickets.',
+        kind: RoleKind.admin,
+        perms: [
+            Permission.readUsers,
+            Permission.logoutUsers,
+            Permission.impersonateUsers,
+            Permission.readAuditLogs,
+        ],
+    },
+];
 
 interface SeedUser {
     name: string;
     email: string;
     password: string;
-    roles: RoleKey[];
+    role: string;
+    extraPerms?: Permission[];
 }
 
 const seedUsers: SeedUser[] = [
     {
-        name: 'Admin User',
+        name: 'Super Admin',
         email: 'admin@example.com',
         password: 'Admin123!',
-        roles: [RoleKey.appAdmin, RoleKey.user],
+        role: SUPER_ADMIN_ROLE_KEY,
+    },
+    {
+        name: 'Support Admin',
+        email: 'support@example.com',
+        password: 'Support123!',
+        role: 'support',
     },
     {
         name: 'Regular User',
         email: 'user@example.com',
         password: 'User123!',
-        roles: [RoleKey.user],
+        role: DEFAULT_ROLE_KEY,
     },
 ];
 
@@ -45,6 +76,18 @@ async function resetDatabase() {
     await mongoose.connection.dropDatabase();
 }
 
+async function seedRolesStep() {
+    await RolesImpl.ensureSystemRoles();
+    for (const role of seedRoles) {
+        if (await RoleModel.exists({ key: role.key })) {
+            logger.info(`Skipped role ${role.key} (already exists)`);
+            continue;
+        }
+        await RoleModel.create({ ...role, isSystem: false });
+        logger.info(`Seeded role ${role.key}`);
+    }
+}
+
 async function seedUser(u: SeedUser): Promise<'created' | 'skipped'> {
     // Idempotent: never create the same email twice
     const existing = await UsersImpl.findByEmail(u.email);
@@ -57,8 +100,9 @@ async function seedUser(u: SeedUser): Promise<'created' | 'skipped'> {
             email: u.email,
             password: u.password,
         });
-        // register() gives every new user the default role; apply extra roles here
-        await UsersImpl.setRoles(user.id, u.roles);
+        // register() assigns the default role; set the seeded one directly
+        // (UsersImpl.updateUserAccess needs an acting admin, which doesn't exist yet)
+        await UsersOperations.setAccess(user.id, u.role, u.extraPerms ?? []);
         return 'created';
     } catch (error) {
         if (error instanceof ConflictError) return 'skipped';
@@ -70,6 +114,7 @@ async function main() {
     await connectDB();
 
     if (shouldReset) await resetDatabase();
+    await seedRolesStep();
 
     let created = 0;
     let skipped = 0;
@@ -78,7 +123,7 @@ async function main() {
         const outcome = await seedUser(u);
         if (outcome === 'created') {
             created++;
-            logger.info(`Seeded ${u.email}`, { roles: u.roles });
+            logger.info(`Seeded ${u.email}`, { role: u.role });
         } else {
             skipped++;
             logger.info(`Skipped ${u.email} (already exists)`);

@@ -1,5 +1,20 @@
-import { describe, it, expect } from 'vitest';
-import { gql } from '../../../tests/graphql.helpers.js';
+import { beforeEach, describe, it, expect } from 'vitest';
+import { bearer, gql as rawGql } from '../../../tests/graphql.helpers.js';
+import { registerTestUser } from '../../auth/tests/auth.helpers.js';
+import { Permission } from '../../roles/index.js';
+import { UsersOperations } from '../../users/index.js';
+
+// Every request in this file is sent as a user holding all example permissions
+// (the DB is wiped after each test, so the user is re-created each time)
+let token = '';
+beforeEach(async () => {
+    const editor = await registerTestUser({ email: 'editor@example.com' });
+    // The default `user` role has create + update; delete is granted as a per-user extra
+    await UsersOperations.setAccess(editor.user.id, 'user', [Permission.deleteExample]);
+    token = editor.token;
+});
+const gql = <T = Record<string, unknown>>(query: string, variables?: Record<string, unknown>) =>
+    rawGql<T>(query, variables, bearer(token));
 
 const FIELDS = 'id firstName lastName createdAt updatedAt';
 
@@ -99,5 +114,37 @@ describe('example module', () => {
     it('rejects a malformed id with VALIDATION_ERROR instead of a server error', async () => {
         const res = await gql(DELETE, { id: 'not-an-object-id' });
         expect(res.body.errors?.[0].extensions?.code).toBe('VALIDATION_ERROR');
+    });
+});
+
+describe('example permissions', () => {
+    it('reads are public', async () => {
+        const res = await rawGql(LIST);
+        expect(res.body.errors).toBeUndefined();
+    });
+
+    it('mutations require a token', async () => {
+        const res = await rawGql(CREATE, { input: { firstName: 'A', lastName: 'B' } });
+        expect(res.body.errors?.[0].extensions?.code).toBe('UNAUTHENTICATED');
+    });
+
+    it('the default user role can create and update but not delete', async () => {
+        const user = await registerTestUser({ email: 'plain@example.com' });
+        const created = await rawGql<{ createExample: ExampleT }>(
+            CREATE,
+            { input: { firstName: 'A', lastName: 'B' } },
+            bearer(user.token),
+        );
+        expect(created.body.errors).toBeUndefined();
+        const id = created.body.data!.createExample.id;
+
+        const updated = await rawGql(UPDATE, { id, input: { lastName: 'C' } }, bearer(user.token));
+        expect(updated.body.errors).toBeUndefined();
+
+        const deleted = await rawGql(DELETE, { id }, bearer(user.token));
+        expect(deleted.body.errors?.[0]).toMatchObject({
+            message: 'Missing permission: deleteExample',
+            extensions: { code: 'FORBIDDEN' },
+        });
     });
 });

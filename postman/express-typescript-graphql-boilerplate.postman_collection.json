@@ -1,8 +1,8 @@
 {
     "info": {
-        "_postman_id": "3a5009c7-0a58-490c-af3f-26c9a98f9d3c",
+        "_postman_id": "8a74d712-80ae-4ffb-853d-6e4909ab85d9",
         "name": "express-typescript-graphql-boilerplate-server",
-        "description": "GraphQL API for **express-typescript-graphql-boilerplate-server**.\n\nEvery operation is a `POST {{baseUrl}}/graphql` with a GraphQL body. In Postman's **Body > GraphQL** tab you can click *Auto-fetch* to load the schema for autocomplete (introspection is enabled outside production).\n\n**Setup**\n1. Start the server: `npm run dev`\n2. Set `baseUrl` in the collection's **Variables** tab if you don't use port 3001.\n3. Run the whole collection (Run collection) or send requests one by one, top to bottom.\n\n**Errors** come back as HTTP 200 with an `errors` array. Check `errors[0].extensions.code` (e.g. `VALIDATION_ERROR`, `NOT_FOUND`, `EMAIL_TAKEN`) and `extensions.status` (the HTTP-equivalent status). Every request has tests that check the expected result.\n\n**Auth:** protected requests use `Authorization: Bearer {{token}}`; **register**, **login** and **changePassword** save `token` automatically.\n\n**Variables** set by scripts: `registerEmail` (fresh per run), `token`, `previousToken`, `userId`, `exampleId`, and `registerPassword`/`newPassword` (swapped after a password change).",
+        "description": "GraphQL API for **express-typescript-graphql-boilerplate-server**.\n\nEvery operation is a `POST {{baseUrl}}/graphql` with a GraphQL body. In Postman's **Body > GraphQL** tab you can click *Auto-fetch* to load the schema for autocomplete (introspection is enabled outside production).\n\n**Setup**\n1. Start the server: `npm run dev`\n2. Set `baseUrl` in the collection's **Variables** tab if you don't use port 3001.\n3. Run the whole collection (Run collection) or send requests one by one, top to bottom.\n\n**Errors** come back as HTTP 200 with an `errors` array. Check `errors[0].extensions.code` (e.g. `VALIDATION_ERROR`, `NOT_FOUND`, `EMAIL_TAKEN`) and `extensions.status` (the HTTP-equivalent status). Every request has tests that check the expected result.\n\n**Seed first:** `npm run seed` creates the roles (super-admin, support, user) and one account for each. The Users, Example, Roles and Admin folders log in as them.\n\n**Auth:** protected requests use `Authorization: Bearer {{token}}`; **register**, **login** and **changePassword** save `token` automatically.\n\n**Variables** set by scripts: `registerEmail` (fresh per run), `token`, `previousToken`, `userId`, `exampleId`, and `registerPassword`/`newPassword` (swapped after a password change).",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
     "item": [
@@ -92,7 +92,7 @@
                         "body": {
                             "mode": "graphql",
                             "graphql": {
-                                "query": "mutation Register($input: RegisterInput!) {\n    register(input: $input) {\n        message\n    token\n    user {\n    id\n    name\n    email\n    roles {\n        key\n    }\n    createdAt\n    updatedAt\n    }\n    }\n}\n",
+                                "query": "mutation Register($input: RegisterInput!) {\n    register(input: $input) {\n        message\n    token\n    user {\n    id\n    name\n    email\n    role {\n        key\n        name\n        kind\n        perms\n    }\n    extraPerms\n    createdAt\n    updatedAt\n    }\n    }\n}\n",
                                 "variables": "{\n    \"input\": {\n        \"name\": \"{{registerName}}\",\n        \"email\": \"{{registerEmail}}\",\n        \"password\": \"{{registerPassword}}\"\n    }\n}"
                             }
                         },
@@ -132,7 +132,8 @@
                                     "pm.test('returns a token and the new user without a password', () => {",
                                     "    pm.expect(res.token).to.be.a('string');",
                                     "    pm.expect(res.user.email).to.eql(pm.collectionVariables.get('registerEmail'));",
-                                    "    pm.expect(res.user.roles).to.eql([{ key: 'user' }]);",
+                                    "    pm.expect(res.user.role.key).to.eql('user');",
+                                    "    pm.expect(res.user.role.perms).to.eql(['createExample', 'updateExample']);",
                                     "    pm.expect(res.user).to.not.have.property('password');",
                                     "});",
                                     "pm.collectionVariables.set('token', res.token);",
@@ -234,7 +235,7 @@
                         "body": {
                             "mode": "graphql",
                             "graphql": {
-                                "query": "query Me {\n    me {\n    id\n    name\n    email\n    roles {\n        key\n    }\n    createdAt\n    updatedAt\n    }\n}\n",
+                                "query": "query Me {\n    me {\n    id\n    name\n    email\n    role {\n        key\n        name\n        kind\n        perms\n    }\n    extraPerms\n    createdAt\n    updatedAt\n    }\n}\n",
                                 "variables": "{}"
                             }
                         },
@@ -322,7 +323,7 @@
                         "body": {
                             "mode": "graphql",
                             "graphql": {
-                                "query": "mutation Login($input: LoginInput!) {\n    login(input: $input) {\n    token\n    user {\n    id\n    name\n    email\n    roles {\n        key\n    }\n    createdAt\n    updatedAt\n    }\n    }\n}\n",
+                                "query": "mutation Login($input: LoginInput!) {\n    login(input: $input) {\n    token\n    user {\n    id\n    name\n    email\n    role {\n        key\n        name\n        kind\n        perms\n    }\n    extraPerms\n    createdAt\n    updatedAt\n    }\n    }\n}\n",
                                 "variables": "{\n    \"input\": {\n        \"email\": \"{{registerEmail}}\",\n        \"password\": \"{{registerPassword}}\"\n    }\n}"
                             }
                         },
@@ -453,7 +454,7 @@
                         "body": {
                             "mode": "graphql",
                             "graphql": {
-                                "query": "mutation ChangePassword($input: ChangePasswordInput!) {\n    changePassword(input: $input) {\n    token\n    user {\n    id\n    name\n    email\n    roles {\n        key\n    }\n    createdAt\n    updatedAt\n    }\n    }\n}\n",
+                                "query": "mutation ChangePassword($input: ChangePasswordInput!) {\n    changePassword(input: $input) {\n    token\n    user {\n    id\n    name\n    email\n    role {\n        key\n        name\n        kind\n        perms\n    }\n    extraPerms\n    createdAt\n    updatedAt\n    }\n    }\n}\n",
                                 "variables": "{\n    \"input\": {\n        \"currentPassword\": \"{{registerPassword}}\",\n        \"newPassword\": \"{{newPassword}}\"\n    }\n}"
                             }
                         },
@@ -660,7 +661,55 @@
         },
         {
             "name": "Users",
+            "description": "Listing users requires the `readUsers` permission (admins only). Needs the seeded accounts: run `npm run seed` first.",
             "item": [
+                {
+                    "name": "login (super admin)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation Login($input: LoginInput!) {\n    login(input: $input) {\n        token\n        user {\n            id\n            role {\n                key\n                kind\n                perms\n            }\n            extraPerms\n        }\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"email\": \"{{adminEmail}}\",\n        \"password\": \"{{adminPassword}}\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Saves `{{adminToken}}` and `{{adminId}}`. Needs the seeded accounts: run `npm run seed` first.",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "const res = pm.response.json().data.login;",
+                                    "pm.collectionVariables.set('adminToken', res.token);",
+                                    "",
+                                    "pm.collectionVariables.set('adminId', res.user.id);",
+                                    "pm.test('has the super-admin role', () => {",
+                                    "    pm.expect(res.user.role.key).to.eql('super-admin');",
+                                    "    pm.expect(res.user.role.perms).to.include('superAdmin');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
                 {
                     "name": "users (paginated)",
                     "request": {
@@ -669,7 +718,7 @@
                         "body": {
                             "mode": "graphql",
                             "graphql": {
-                                "query": "query Users($page: Int, $limit: Int) {\n    users(page: $page, limit: $limit) {\n        data {\n    id\n    name\n    email\n    roles {\n        key\n    }\n    createdAt\n    updatedAt\n        }\n        page\n        limit\n        total\n        totalPages\n    }\n}\n",
+                                "query": "query Users($page: Int, $limit: Int) {\n    users(page: $page, limit: $limit) {\n        data {\n    id\n    name\n    email\n    role {\n        key\n        name\n        kind\n        perms\n    }\n    extraPerms\n    createdAt\n    updatedAt\n        }\n        page\n        limit\n        total\n        totalPages\n    }\n}\n",
                                 "variables": "{\n    \"page\": 1,\n    \"limit\": 10\n}"
                             }
                         },
@@ -678,9 +727,16 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "Newest first. `page` defaults to 1, `limit` to 20 (max 100). (Was `GET /api/v1/users`.)\n\n**Note:** currently public, as the REST route was.",
+                        "description": "Newest first. `page` defaults to 1, `limit` to 20 (max 100). Requires `readUsers`. (Was `GET /api/v1/users`.)",
                         "auth": {
-                            "type": "noauth"
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
                         }
                     },
                     "response": [],
@@ -724,7 +780,14 @@
                             "path": ["graphql"]
                         },
                         "auth": {
-                            "type": "noauth"
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
                         }
                     },
                     "response": [],
@@ -744,13 +807,93 @@
                             }
                         }
                     ]
+                },
+                {
+                    "name": "users - no token (UNAUTHENTICATED)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Users {\n    users {\n        total\n    }\n}\n",
+                                "variables": "{}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns UNAUTHENTICATED', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('UNAUTHENTICATED');",
+                                    "    pm.expect(err.extensions.status).to.eql(401);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
                 }
             ]
         },
         {
             "name": "Example",
-            "description": "CRUD for the template `Example` module. Run in order: **createExample** stores the new id in the `exampleId` collection variable for the requests after it.",
+            "description": "CRUD for the template `Example` module. Reads are public; mutations need user permissions. New accounts get `createExample` and `updateExample`, but `deleteExample` must be granted. Run in order: **createExample** stores the new id in `exampleId`.",
             "item": [
+                {
+                    "name": "login (regular user)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation Login($input: LoginInput!) {\n    login(input: $input) {\n        token\n        user {\n            id\n            role {\n                key\n                kind\n                perms\n            }\n            extraPerms\n        }\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"email\": \"{{registerEmail}}\",\n        \"password\": \"{{registerPassword}}\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Fresh token for the user from the Auth folder (that folder ends with a logout).",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "const res = pm.response.json().data.login;",
+                                    "pm.collectionVariables.set('token', res.token);"
+                                ]
+                            }
+                        }
+                    ]
+                },
                 {
                     "name": "createExample",
                     "request": {
@@ -768,9 +911,16 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "(Was `POST /api/v1/example/createExample`.) Saves the new id to `{{exampleId}}`.",
+                        "description": "Requires `createExample`. (Was `POST /api/v1/example/createExample`.) Saves the new id to `{{exampleId}}`.",
                         "auth": {
-                            "type": "noauth"
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
                         }
                     },
                     "response": [],
@@ -797,6 +947,45 @@
                     ]
                 },
                 {
+                    "name": "createExample - no token (UNAUTHENTICATED)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation CreateExample($input: CreateExampleInput!) {\n    createExample(input: $input) {\n        id\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"firstName\": \"A\",\n        \"lastName\": \"B\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns UNAUTHENTICATED', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('UNAUTHENTICATED');",
+                                    "    pm.expect(err.extensions.status).to.eql(401);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
                     "name": "examples (paginated)",
                     "request": {
                         "method": "POST",
@@ -813,7 +1002,7 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "Newest first. (Was `GET /api/v1/example/readExample`.)",
+                        "description": "Public. Newest first. (Was `GET /api/v1/example/readExample`.)",
                         "auth": {
                             "type": "noauth"
                         }
@@ -856,7 +1045,7 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "Returns `null` (not an error) when the id doesn't exist.",
+                        "description": "Public. Returns `null` (not an error) when the id doesn't exist.",
                         "auth": {
                             "type": "noauth"
                         }
@@ -898,9 +1087,16 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "Partial update: send only the fields to change (at least one). (Was `POST /api/v1/example/updateExample`.)",
+                        "description": "Requires `updateExample`. Partial update. (Was `POST /api/v1/example/updateExample`.)",
                         "auth": {
-                            "type": "noauth"
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
                         }
                     },
                     "response": [],
@@ -926,7 +1122,7 @@
                     ]
                 },
                 {
-                    "name": "deleteExample",
+                    "name": "deleteExample - without deleteExample (FORBIDDEN)",
                     "request": {
                         "method": "POST",
                         "header": [],
@@ -942,9 +1138,67 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "(Was `POST /api/v1/example/deleteExample`.)",
+                        "description": "New users don't get `deleteExample` by default.",
                         "auth": {
-                            "type": "noauth"
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns FORBIDDEN', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('FORBIDDEN');",
+                                    "    pm.expect(err.extensions.status).to.eql(403);",
+                                    "});",
+                                    "",
+                                    "pm.test('names the missing permission', () => {",
+                                    "    pm.expect(pm.response.json().errors[0].message).to.eql('Missing permission: deleteExample');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "deleteExample (super admin)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation DeleteExample($id: ID!) {\n    deleteExample(id: $id)\n}\n",
+                                "variables": "{\n    \"id\": \"{{exampleId}}\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "`superAdmin` implies every permission. (Was `POST /api/v1/example/deleteExample`.)",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
                         }
                     },
                     "response": [],
@@ -1022,7 +1276,14 @@
                             "path": ["graphql"]
                         },
                         "auth": {
-                            "type": "noauth"
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
                         }
                     },
                     "response": [],
@@ -1061,7 +1322,14 @@
                             "path": ["graphql"]
                         },
                         "auth": {
-                            "type": "noauth"
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
                         }
                     },
                     "response": [],
@@ -1076,6 +1344,1183 @@
                                     "    pm.expect(err, 'expected an error').to.exist;",
                                     "    pm.expect(err.extensions.code).to.eql('VALIDATION_ERROR');",
                                     "    pm.expect(err.extensions.status).to.eql(400);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Roles",
+            "description": "Role-based access control. Each user has one role (a named set of permissions) plus optional per-user `extraPerms`. System roles `super-admin` (locked) and `user` (default) always exist. Needs the seeded accounts: run `npm run seed` first. Run after the Auth, Users and Example folders.",
+            "item": [
+                {
+                    "name": "login (support admin)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation Login($input: LoginInput!) {\n    login(input: $input) {\n        token\n        user {\n            id\n            role {\n                key\n                kind\n                perms\n            }\n            extraPerms\n        }\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"email\": \"{{supportEmail}}\",\n        \"password\": \"{{supportPassword}}\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Saves `{{supportToken}}`. The seeded `support` role holds readUsers, logoutUsers, impersonateUsers and readAuditLogs.",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "const res = pm.response.json().data.login;",
+                                    "pm.collectionVariables.set('supportToken', res.token);",
+                                    "",
+                                    "pm.test('has the support role (a limited admin)', () => {",
+                                    "    pm.expect(res.user.role.key).to.eql('support');",
+                                    "    pm.expect(res.user.role.kind).to.eql('admin');",
+                                    "    pm.expect(res.user.role.perms).to.not.include('superAdmin');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "roles",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Roles {\n    roles {\n        key\n        name\n        description\n        kind\n        perms\n        isSystem\n    }\n}\n",
+                                "variables": "{}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Requires `readRoles`.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('system roles come first', () => {",
+                                    "    const keys = pm.response.json().data.roles.map((r) => r.key);",
+                                    "    pm.expect(keys.slice(0, 2)).to.eql(['super-admin', 'user']);",
+                                    "    pm.expect(keys).to.include('support');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "roles - support admin (FORBIDDEN)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Roles {\n    roles {\n        key\n    }\n}\n",
+                                "variables": "{}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "The support role lacks `readRoles`.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{supportToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns FORBIDDEN', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('FORBIDDEN');",
+                                    "    pm.expect(err.extensions.status).to.eql(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "createRole",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation CreateRole($input: CreateRoleInput!) {\n    createRole(input: $input) {\n        key\n        name\n        description\n        kind\n        perms\n        isSystem\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"key\": \"{{roleKey}}\",\n        \"name\": \"Editors\",\n        \"description\": \"Full control over examples\",\n        \"kind\": \"user\",\n        \"perms\": [\n            \"createExample\",\n            \"updateExample\",\n            \"deleteExample\"\n        ]\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Requires `manageRoles`. You can only include permissions you hold, and admin-kind roles need a super admin. Saves `{{roleKey}}`. Audited.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "prerequest",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "// Unique key per run so the request can be re-sent",
+                                    "pm.collectionVariables.set('roleKey', `editors-${Date.now()}`);"
+                                ]
+                            }
+                        },
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('creates a custom user role', () => {",
+                                    "    const role = pm.response.json().data.createRole;",
+                                    "    pm.expect(role.key).to.eql(pm.collectionVariables.get('roleKey'));",
+                                    "    pm.expect(role.isSystem).to.eql(false);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "createRole - support admin (FORBIDDEN)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation CreateRole($input: CreateRoleInput!) {\n    createRole(input: $input) {\n        key\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"key\": \"nope\",\n        \"name\": \"Nope\",\n        \"kind\": \"user\",\n        \"perms\": []\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{supportToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns FORBIDDEN', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('FORBIDDEN');",
+                                    "    pm.expect(err.extensions.status).to.eql(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "updateRole",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation UpdateRole($key: String!, $input: UpdateRoleInput!) {\n    updateRole(key: $key, input: $input) {\n        key\n        name\n        description\n        kind\n        perms\n        isSystem\n    }\n}\n",
+                                "variables": "{\n    \"key\": \"{{roleKey}}\",\n    \"input\": {\n        \"name\": \"Example editors\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Requires `manageRoles`. Permission changes apply to every user with the role on their next request. Audited.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('renamed', () => pm.expect(pm.response.json().data.updateRole.name).to.eql('Example editors'));"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "updateRole - super-admin (SYSTEM_ROLE_LOCKED)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation UpdateRole($key: String!, $input: UpdateRoleInput!) {\n    updateRole(key: $key, input: $input) {\n        key\n    }\n}\n",
+                                "variables": "{\n    \"key\": \"super-admin\",\n    \"input\": {\n        \"perms\": []\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns SYSTEM_ROLE_LOCKED', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('SYSTEM_ROLE_LOCKED');",
+                                    "    pm.expect(err.extensions.status).to.eql(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "setUserAccess - assign the new role",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation SetUserAccess($userId: ID!, $input: SetUserAccessInput!) {\n    setUserAccess(userId: $userId, input: $input) {\n        id\n        role {\n            key\n            perms\n        }\n        extraPerms\n    }\n}\n",
+                                "variables": "{\n    \"userId\": \"{{userId}}\",\n    \"input\": {\n        \"role\": \"{{roleKey}}\",\n        \"extraPerms\": []\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Requires `manageUserAccess`. Assigns a role plus optional per-user `extraPerms`. Only a super admin can manage admins, you can only hand out permissions you hold, and nobody can change their own access. Audited.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('user now has the role', () => {",
+                                    "    pm.expect(pm.response.json().data.setUserAccess.role.key).to.eql(pm.collectionVariables.get('roleKey'));",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "deleteRole - in use (ROLE_IN_USE)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation DeleteRole($key: String!) {\n    deleteRole(key: $key)\n}\n",
+                                "variables": "{\n    \"key\": \"{{roleKey}}\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Roles still assigned to users can't be deleted.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns ROLE_IN_USE', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('ROLE_IN_USE');",
+                                    "    pm.expect(err.extensions.status).to.eql(409);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "setUserAccess - back to user + extra deleteExample",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation SetUserAccess($userId: ID!, $input: SetUserAccessInput!) {\n    setUserAccess(userId: $userId, input: $input) {\n        id\n        role {\n            key\n            perms\n        }\n        extraPerms\n    }\n}\n",
+                                "variables": "{\n    \"userId\": \"{{userId}}\",\n    \"input\": {\n        \"role\": \"user\",\n        \"extraPerms\": [\n            \"deleteExample\"\n        ]\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('default role plus a per-user extra', () => {",
+                                    "    const u = pm.response.json().data.setUserAccess;",
+                                    "    pm.expect(u.role.key).to.eql('user');",
+                                    "    pm.expect(u.extraPerms).to.eql(['deleteExample']);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "setUserAccess - admin perm as extra on a user (VALIDATION_ERROR)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation SetUserAccess($userId: ID!, $input: SetUserAccessInput!) {\n    setUserAccess(userId: $userId, input: $input) {\n        id\n        role {\n            key\n            perms\n        }\n        extraPerms\n    }\n}\n",
+                                "variables": "{\n    \"userId\": \"{{userId}}\",\n    \"input\": {\n        \"role\": \"user\",\n        \"extraPerms\": [\n            \"readUsers\"\n        ]\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Admin permissions only apply through an admin-kind role.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns VALIDATION_ERROR', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('VALIDATION_ERROR');",
+                                    "    pm.expect(err.extensions.status).to.eql(400);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "setUserAccess - support admin (FORBIDDEN)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation SetUserAccess($userId: ID!, $input: SetUserAccessInput!) {\n    setUserAccess(userId: $userId, input: $input) {\n        id\n        role {\n            key\n            perms\n        }\n        extraPerms\n    }\n}\n",
+                                "variables": "{\n    \"userId\": \"{{userId}}\",\n    \"input\": {\n        \"role\": \"user\",\n        \"extraPerms\": []\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "The support role lacks `manageUserAccess`.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{supportToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns FORBIDDEN', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('FORBIDDEN');",
+                                    "    pm.expect(err.extensions.status).to.eql(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "deleteRole",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation DeleteRole($key: String!) {\n    deleteRole(key: $key)\n}\n",
+                                "variables": "{\n    \"key\": \"{{roleKey}}\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Requires `manageRoles`. Audited.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('returns true', () => pm.expect(pm.response.json().data.deleteRole).to.eql(true));"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "deleteRole - system role (SYSTEM_ROLE_LOCKED)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation DeleteRole($key: String!) {\n    deleteRole(key: $key)\n}\n",
+                                "variables": "{\n    \"key\": \"user\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{adminToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns SYSTEM_ROLE_LOCKED', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('SYSTEM_ROLE_LOCKED');",
+                                    "    pm.expect(err.extensions.status).to.eql(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Admin",
+            "description": "Impersonation, audit log and per-user logout. Needs the seeded accounts: run `npm run seed` first. Uses the super admin (`adminToken`) and the support admin (`supportToken`) from the Users and Roles folders, so run those first.",
+            "item": [
+                {
+                    "name": "session (support admin)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Session {\n    session {\n        user {\n            id\n            email\n        }\n        effectivePerms\n        impersonatedBy {\n            id\n            email\n        }\n    }\n}\n",
+                                "variables": "{}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Who the token belongs to, what it can actually do, and the impersonating admin (if any).",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{supportToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('effective permissions come from the support role', () => {",
+                                    "    const perms = pm.response.json().data.session.effectivePerms;",
+                                    "    pm.expect(perms).to.include.members(['readUsers', 'logoutUsers', 'impersonateUsers', 'readAuditLogs']);",
+                                    "    pm.expect(perms).to.not.include('manageUserAccess');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "impersonateUser",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation Impersonate($userId: ID!, $reason: String!) {\n    impersonateUser(userId: $userId, reason: $reason) {\n        token\n        expiresAt\n        impersonatedBy\n        user {\n            id\n            email\n        }\n    }\n}\n",
+                                "variables": "{\n    \"userId\": \"{{userId}}\",\n    \"reason\": \"Support ticket #123: dashboard not loading\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Requires `impersonateUsers`. Returns a token that acts as the user for IMPERSONATION_TOKEN_TTL (15 min). The reason is stored in the audit log. Saves `{{impersonationToken}}`.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{supportToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "const res = pm.response.json().data.impersonateUser;",
+                                    "pm.test('returns a short-lived token for the user', () => {",
+                                    "    pm.expect(res.user.id).to.eql(pm.collectionVariables.get('userId'));",
+                                    "    pm.expect(new Date(res.expiresAt) - Date.now()).to.be.below(16 * 60 * 1000);",
+                                    "});",
+                                    "pm.collectionVariables.set('impersonationToken', res.token);"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "session - while impersonating",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Session {\n    session {\n        user {\n            id\n            email\n        }\n        effectivePerms\n        impersonatedBy {\n            id\n            email\n        }\n    }\n}\n",
+                                "variables": "{}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Frontends can use `impersonatedBy` to show a banner.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{impersonationToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('acts as the user and shows the admin behind it', () => {",
+                                    "    const s = pm.response.json().data.session;",
+                                    "    pm.expect(s.user.id).to.eql(pm.collectionVariables.get('userId'));",
+                                    "    pm.expect(s.impersonatedBy.email).to.eql(pm.collectionVariables.get('supportEmail'));",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "logout - while impersonating (IMPERSONATION_NOT_ALLOWED)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation Logout {\n    logout\n}\n",
+                                "variables": "{}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "logout, changePassword, impersonateUser, setUserAccess and role management are blocked for impersonation tokens.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{impersonationToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns IMPERSONATION_NOT_ALLOWED', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('IMPERSONATION_NOT_ALLOWED');",
+                                    "    pm.expect(err.extensions.status).to.eql(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "impersonateUser - an admin (CANNOT_IMPERSONATE_ADMIN)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation Impersonate($userId: ID!, $reason: String!) {\n    impersonateUser(userId: $userId, reason: $reason) {\n        token\n        expiresAt\n        impersonatedBy\n        user {\n            id\n            email\n        }\n    }\n}\n",
+                                "variables": "{\n    \"userId\": \"{{adminId}}\",\n    \"reason\": \"Trying to impersonate an admin\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{supportToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns CANNOT_IMPERSONATE_ADMIN', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('CANNOT_IMPERSONATE_ADMIN');",
+                                    "    pm.expect(err.extensions.status).to.eql(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "auditLogs",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query AuditLogs($action: AuditAction) {\n    auditLogs(action: $action, limit: 5) {\n        data {\n            id\n            action\n            actorId\n            targetId\n            reason\n            details\n            requestId\n            ip\n            createdAt\n        }\n        total\n    }\n}\n",
+                                "variables": "{\n    \"action\": \"impersonationStarted\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Requires `readAuditLogs`. Filter by `action`, `actorId` or `targetId`.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{supportToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('the impersonation is recorded with its reason', () => {",
+                                    "    const latest = pm.response.json().data.auditLogs.data[0];",
+                                    "    pm.expect(latest.targetId).to.eql(pm.collectionVariables.get('userId'));",
+                                    "    pm.expect(latest.reason).to.include('Support ticket #123');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "logoutUser - regular user (FORBIDDEN)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation LogoutUser($userId: ID!) {\n    logoutUser(userId: $userId)\n}\n",
+                                "variables": "{\n    \"userId\": \"{{adminId}}\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Regular users don't have `logoutUsers`.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns FORBIDDEN', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('FORBIDDEN');",
+                                    "    pm.expect(err.extensions.status).to.eql(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "logoutUser",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation LogoutUser($userId: ID!) {\n    logoutUser(userId: $userId)\n}\n",
+                                "variables": "{\n    \"userId\": \"{{userId}}\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Requires `logoutUsers`. Signs `{{userId}}` out of every device (increments their tokenVersion). Audited. To sign EVERYONE out, rotate `JWT_SECRET`.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{supportToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('returns true', () => pm.expect(pm.response.json().data.logoutUser).to.eql(true));"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "me - impersonation token after logoutUser (UNAUTHENTICATED)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Me {\n    me {\n        id\n    }\n}\n",
+                                "variables": "{}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Revoking the user's tokens also ends any impersonation of them.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{impersonationToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns UNAUTHENTICATED', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('UNAUTHENTICATED');",
+                                    "    pm.expect(err.extensions.status).to.eql(401);",
+                                    "});",
+                                    "",
+                                    "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "logoutUser - unknown user (NOT_FOUND)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation LogoutUser($userId: ID!) {\n    logoutUser(userId: $userId)\n}\n",
+                                "variables": "{\n    \"userId\": \"000000000000000000000000\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{supportToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns NOT_FOUND', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('NOT_FOUND');",
+                                    "    pm.expect(err.extensions.status).to.eql(404);",
                                     "});"
                                 ]
                             }
@@ -1118,6 +2563,51 @@
         },
         {
             "key": "previousToken",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "adminEmail",
+            "value": "admin@example.com",
+            "type": "string"
+        },
+        {
+            "key": "adminPassword",
+            "value": "Admin123!",
+            "type": "string"
+        },
+        {
+            "key": "adminToken",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "adminId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "supportEmail",
+            "value": "support@example.com",
+            "type": "string"
+        },
+        {
+            "key": "supportPassword",
+            "value": "Support123!",
+            "type": "string"
+        },
+        {
+            "key": "supportToken",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "impersonationToken",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "roleKey",
             "value": "",
             "type": "string"
         },
