@@ -1,0 +1,648 @@
+{
+    "info": {
+        "_postman_id": "887c57c7-bac2-47b8-9488-bcc78d2e1bda",
+        "name": "express-typescript-graphql-boilerplate-server",
+        "description": "GraphQL API for **express-typescript-graphql-boilerplate-server**.\n\nEvery operation is a `POST {{baseUrl}}/graphql` with a GraphQL body. In Postman's **Body > GraphQL** tab you can click *Auto-fetch* to load the schema for autocomplete (introspection is enabled outside production).\n\n**Setup**\n1. Start the server: `npm run dev`\n2. Set `baseUrl` in the collection's **Variables** tab if you don't use port 3001.\n3. Run the whole collection (Run collection) or send requests one by one, top to bottom.\n\n**Errors** come back as HTTP 200 with an `errors` array. Check `errors[0].extensions.code` (e.g. `VALIDATION_ERROR`, `NOT_FOUND`, `EMAIL_TAKEN`) and `extensions.status` (the HTTP-equivalent status). Every request has tests that check the expected result.\n\n**Variables** set by scripts: `registerEmail` (fresh per run), `userId`, `exampleId`.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Health",
+            "description": "Liveness checks.",
+            "item": [
+                {
+                    "name": "GET /health (plain HTTP probe)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/health",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["health"]
+                        },
+                        "description": "Plain HTTP liveness probe for Docker / load balancers. Not part of the GraphQL API."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('status ok', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json()).to.eql({ status: 'ok' });",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "query health",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Health {\n    health\n}\n",
+                                "variables": "{}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Liveness check that goes through the whole GraphQL pipeline."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('health is ok', () => pm.expect(pm.response.json().data.health).to.eql('ok'));"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Auth",
+            "description": "Account registration. `register` is rate limited per IP: only **failed** attempts count, up to `AUTH_RATE_LIMIT_MAX` per 15 minutes (5 in `.env.example`). Each collection run makes 2 deliberate failures, so with a limit of 5 the third run within 15 minutes will get `TOO_MANY_REQUESTS`; restart the dev server to reset the in-memory counter.",
+            "item": [
+                {
+                    "name": "register",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation Register($input: RegisterInput!) {\n    register(input: $input) {\n        message\n        user {\n    id\n    name\n    email\n    roles {\n        key\n    }\n    createdAt\n    updatedAt\n        }\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"name\": \"{{registerName}}\",\n        \"email\": \"{{registerEmail}}\",\n        \"password\": \"{{registerPassword}}\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Creates an account. Email is trimmed and lowercased; password must be 8-72 characters. (Was `POST /api/v1/auth/register`.)\n\nThe pre-request script generates a unique `registerEmail` each time."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "prerequest",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "// Fresh email on every run so the request can be re-sent without hitting EMAIL_TAKEN",
+                                    "pm.collectionVariables.set('registerEmail', `user.${Date.now()}@example.com`);"
+                                ]
+                            }
+                        },
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "const res = pm.response.json().data.register;",
+                                    "pm.test('returns the new user without a password', () => {",
+                                    "    pm.expect(res.message).to.eql('Registered! You can now log in.');",
+                                    "    pm.expect(res.user.email).to.eql(pm.collectionVariables.get('registerEmail'));",
+                                    "    pm.expect(res.user.roles).to.eql([{ key: 'user' }]);",
+                                    "    pm.expect(res.user).to.not.have.property('password');",
+                                    "});",
+                                    "pm.collectionVariables.set('userId', res.user.id);"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "register - duplicate email (EMAIL_TAKEN)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation Register($input: RegisterInput!) {\n    register(input: $input) {\n        message\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"name\": \"{{registerName}}\",\n        \"email\": \"{{registerEmail}}\",\n        \"password\": \"{{registerPassword}}\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Re-uses the email from the previous request. Run **register** first."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns EMAIL_TAKEN', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('EMAIL_TAKEN');",
+                                    "    pm.expect(err.extensions.status).to.eql(409);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "register - invalid input (VALIDATION_ERROR)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation Register($input: RegisterInput!) {\n    register(input: $input) {\n        message\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"name\": \" \",\n        \"email\": \"not-an-email\",\n        \"password\": \"short\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Zod validation errors come back in `errors[0].extensions.details`."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns VALIDATION_ERROR', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('VALIDATION_ERROR');",
+                                    "    pm.expect(err.extensions.status).to.eql(400);",
+                                    "});",
+                                    "",
+                                    "pm.test('lists each invalid field in extensions.details', () => {",
+                                    "    const fields = pm.response.json().errors[0].extensions.details.map((i) => i.path[0]).sort();",
+                                    "    pm.expect(fields).to.eql(['email', 'name', 'password']);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Users",
+            "item": [
+                {
+                    "name": "users (paginated)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Users($page: Int, $limit: Int) {\n    users(page: $page, limit: $limit) {\n        data {\n    id\n    name\n    email\n    roles {\n        key\n    }\n    createdAt\n    updatedAt\n        }\n        page\n        limit\n        total\n        totalPages\n    }\n}\n",
+                                "variables": "{\n    \"page\": 1,\n    \"limit\": 10\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Newest first. `page` defaults to 1, `limit` to 20 (max 100). (Was `GET /api/v1/users`.)\n\n**Note:** currently public, as the REST route was."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('returns a page', () => {",
+                                    "    const page = pm.response.json().data.users;",
+                                    "    pm.expect(page.page).to.eql(1);",
+                                    "    pm.expect(page.limit).to.eql(10);",
+                                    "    pm.expect(page.data).to.be.an('array');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "users - limit too high (VALIDATION_ERROR)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Users($limit: Int) {\n    users(limit: $limit) {\n        total\n    }\n}\n",
+                                "variables": "{\n    \"limit\": 500\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns VALIDATION_ERROR', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('VALIDATION_ERROR');",
+                                    "    pm.expect(err.extensions.status).to.eql(400);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Example",
+            "description": "CRUD for the template `Example` module. Run in order: **createExample** stores the new id in the `exampleId` collection variable for the requests after it.",
+            "item": [
+                {
+                    "name": "createExample",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation CreateExample($input: CreateExampleInput!) {\n    createExample(input: $input) {\nid\nfirstName\nlastName\ncreatedAt\nupdatedAt\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"firstName\": \"  Ada \",\n        \"lastName\": \"Lovelace\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "(Was `POST /api/v1/example/createExample`.) Saves the new id to `{{exampleId}}`."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "const doc = pm.response.json().data.createExample;",
+                                    "pm.test('trims input and returns the document', () => {",
+                                    "    pm.expect(doc.firstName).to.eql('Ada');",
+                                    "    pm.expect(doc.id).to.match(/^[a-f0-9]{24}$/);",
+                                    "});",
+                                    "pm.collectionVariables.set('exampleId', doc.id);"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "examples (paginated)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Examples($page: Int, $limit: Int) {\n    examples(page: $page, limit: $limit) {\n        data {\nid\nfirstName\nlastName\ncreatedAt\nupdatedAt\n        }\n        page\n        limit\n        total\n        totalPages\n    }\n}\n",
+                                "variables": "{\n    \"page\": 1,\n    \"limit\": 10\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Newest first. (Was `GET /api/v1/example/readExample`.)"
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('includes the created example', () => {",
+                                    "    const ids = pm.response.json().data.examples.data.map((d) => d.id);",
+                                    "    pm.expect(ids).to.include(pm.collectionVariables.get('exampleId'));",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "example (by id)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Example($id: ID!) {\n    example(id: $id) {\nid\nfirstName\nlastName\ncreatedAt\nupdatedAt\n    }\n}\n",
+                                "variables": "{\n    \"id\": \"{{exampleId}}\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Returns `null` (not an error) when the id doesn't exist."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('returns the example', () => {",
+                                    "    pm.expect(pm.response.json().data.example.id).to.eql(pm.collectionVariables.get('exampleId'));",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "updateExample",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation UpdateExample($id: ID!, $input: UpdateExampleInput!) {\n    updateExample(id: $id, input: $input) {\nid\nfirstName\nlastName\ncreatedAt\nupdatedAt\n    }\n}\n",
+                                "variables": "{\n    \"id\": \"{{exampleId}}\",\n    \"input\": {\n        \"lastName\": \"Byron\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Partial update: send only the fields to change (at least one). (Was `POST /api/v1/example/updateExample`.)"
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('changes only the provided field', () => {",
+                                    "    const doc = pm.response.json().data.updateExample;",
+                                    "    pm.expect(doc.firstName).to.eql('Ada');",
+                                    "    pm.expect(doc.lastName).to.eql('Byron');",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "deleteExample",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation DeleteExample($id: ID!) {\n    deleteExample(id: $id)\n}\n",
+                                "variables": "{\n    \"id\": \"{{exampleId}}\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "(Was `POST /api/v1/example/deleteExample`.)"
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('returns true', () => pm.expect(pm.response.json().data.deleteExample).to.eql(true));"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "example - after delete (null)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Example($id: ID!) {\n    example(id: $id) {\n        id\n    }\n}\n",
+                                "variables": "{\n    \"id\": \"{{exampleId}}\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('is null', () => pm.expect(pm.response.json().data.example).to.be.null);"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "deleteExample - already deleted (NOT_FOUND)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation DeleteExample($id: ID!) {\n    deleteExample(id: $id)\n}\n",
+                                "variables": "{\n    \"id\": \"{{exampleId}}\"\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns NOT_FOUND', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('NOT_FOUND');",
+                                    "    pm.expect(err.extensions.status).to.eql(404);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "updateExample - malformed id (VALIDATION_ERROR)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation UpdateExample($id: ID!, $input: UpdateExampleInput!) {\n    updateExample(id: $id, input: $input) {\n        id\n    }\n}\n",
+                                "variables": "{\n    \"id\": \"not-an-object-id\",\n    \"input\": {\n        \"firstName\": \"X\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns VALIDATION_ERROR', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('VALIDATION_ERROR');",
+                                    "    pm.expect(err.extensions.status).to.eql(400);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:3001",
+            "type": "string"
+        },
+        {
+            "key": "registerName",
+            "value": "Postman User",
+            "type": "string"
+        },
+        {
+            "key": "registerEmail",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "registerPassword",
+            "value": "Password123!",
+            "type": "string"
+        },
+        {
+            "key": "userId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "exampleId",
+            "value": "",
+            "type": "string"
+        }
+    ]
+}

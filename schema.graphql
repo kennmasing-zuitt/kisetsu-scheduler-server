@@ -1,0 +1,113 @@
+type Query {
+  """Paginated list, newest first. (was GET /api/v1/example/readExample)"""
+  examples(
+    page: Int = 1
+
+    """Max 100"""
+    limit: Int = 20
+  ): ExamplePage!
+
+  """A single example, or null if it doesn't exist"""
+  example(id: ID!): Example
+
+  """Paginated list of users, newest first. (was GET /api/v1/users)"""
+  users(
+    page: Int = 1
+
+    """Max 100"""
+    limit: Int = 20
+  ): UserPage!
+
+  """Liveness check that goes through the GraphQL pipeline"""
+  health: String!
+}
+
+type ExamplePage {
+  data: [Example!]!
+  page: Int!
+  limit: Int!
+  total: Int!
+  totalPages: Int!
+}
+
+type Example {
+  id: ID!
+  firstName: String!
+  lastName: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""ISO-8601 date-time string"""
+scalar DateTime
+
+type UserPage {
+  data: [User!]!
+  page: Int!
+  limit: Int!
+  total: Int!
+  totalPages: Int!
+}
+
+"""A user account"""
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  roles: [UserRole!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type UserRole {
+  key: RoleKey!
+}
+
+enum RoleKey {
+  appAdmin
+  user
+}
+
+type Mutation {
+  """(was POST /api/v1/example/createExample)"""
+  createExample(input: CreateExampleInput!): Example!
+
+  """(was POST /api/v1/example/updateExample)"""
+  updateExample(input: UpdateExampleInput!, id: ID!): Example!
+
+  """
+  Returns true when deleted; NOT_FOUND error otherwise. (was POST /api/v1/example/deleteExample)
+  """
+  deleteExample(id: ID!): Boolean!
+
+  """
+  Create an account. Rate limited per IP. (was POST /api/v1/auth/register)
+  """
+  register(input: RegisterInput!): RegisterPayload!
+}
+
+input CreateExampleInput {
+  firstName: String!
+  lastName: String!
+}
+
+"""Only the fields you send are changed"""
+input UpdateExampleInput {
+  firstName: String
+  lastName: String
+}
+
+type RegisterPayload {
+  message: String!
+  user: User!
+}
+
+input RegisterInput {
+  name: String!
+
+  """Normalised to lowercase"""
+  email: String!
+
+  """8-72 characters"""
+  password: String!
+}

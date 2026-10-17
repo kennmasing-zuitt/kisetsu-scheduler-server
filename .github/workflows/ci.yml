@@ -1,0 +1,35 @@
+name: CI
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+jobs:
+    check:
+        runs-on: ubuntu-latest
+        services:
+            mongo:
+                image: mongo:8
+                ports:
+                    - 27017:27017
+        env:
+            NODE_ENV: test
+            LOG_LEVEL: error
+            MONGO_URI: mongodb://localhost:27017/app-test
+            JWT_SECRET: ci-only-secret-0123456789abcdef0123456789
+            CORS_ORIGINS: http://localhost:5173
+            BCRYPT_SALT_ROUNDS: 4
+            API_RATE_LIMIT_MAX: 10000
+            AUTH_RATE_LIMIT_MAX: 10000
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+            - run: npm ci
+            - run: npm run format:check
+            - run: npm run lint
+            - run: npm run typecheck
+            - run: npm run test:run
+            - run: npm run build
