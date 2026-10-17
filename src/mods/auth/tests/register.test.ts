@@ -1,12 +1,13 @@
 import bcrypt from 'bcryptjs';
 import { describe, it, expect } from 'vitest';
-import { gql } from '../../../tests/graphql.helpers.js';
-import { UserModel } from '../../users/db/user.model.js';
-import { REGISTER_MUTATION, registerTestUser, testUser } from './auth.helpers.js';
+import { bearer, gql } from '../../../tests/graphql.helpers.js';
+import { UserModel } from '../../users/index.js';
+import { ME_QUERY, REGISTER_MUTATION, registerTestUser, testUser } from './auth.helpers.js';
 
 interface RegisterData {
     register: {
         message: string;
+        token: string;
         user: { id: string; name: string; email: string; roles: { key: string }[] };
     };
 }
@@ -17,7 +18,8 @@ describe('mutation register', () => {
 
         expect(res.status).toBe(200);
         expect(res.body.errors).toBeUndefined();
-        expect(res.body.data?.register.message).toBe('Registered! You can now log in.');
+        expect(res.body.data?.register.message).toBe('Registered! You are now signed in.');
+        expect(res.body.data?.register.token).toMatch(/^[\w-]+\.[\w-]+\.[\w-]+$/);
         expect(res.body.data?.register.user).toMatchObject({
             name: testUser.name,
             email: testUser.email,
@@ -28,6 +30,14 @@ describe('mutation register', () => {
         expect(stored).toBeTruthy();
         expect(stored!.password).not.toBe(testUser.password);
         expect(await bcrypt.compare(testUser.password, stored!.password)).toBe(true);
+    });
+
+    it('returns a token that works on the me query', async () => {
+        const res = await gql<RegisterData>(REGISTER_MUTATION, { input: testUser });
+        const me = await gql<{ me: { email: string } }>(ME_QUERY, undefined, {
+            ...bearer(res.body.data!.register.token),
+        });
+        expect(me.body.data?.me.email).toBe(testUser.email);
     });
 
     it('normalises the email to lowercase', async () => {

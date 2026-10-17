@@ -10,14 +10,14 @@ import * as AuthImpl from '../../service/index.js';
 @Resolver()
 export class RegisterHandler {
     @Mutation(() => RegisterPayloadObject, {
-        description: 'Create an account. Rate limited per IP. (was POST /api/v1/auth/register)',
+        description:
+            'Create an account and sign in. Rate limited per IP. (was POST /api/v1/auth/register)',
     })
     @UseMiddleware(RateLimit(authLimiter)) // failed attempts count towards AUTH_RATE_LIMIT_MAX
     async register(
         @Arg('input', () => RegisterInputType) input: RegisterInputType,
     ): Promise<RegisterPayload> {
-        const { name, email, password } = parseInput(RegisterInput, input);
-        const user = await AuthImpl.register(name, email, password);
-        return { message: 'Registered! You can now log in.', user };
+        const result = await AuthImpl.register(parseInput(RegisterInput, input));
+        return { message: 'Registered! You are now signed in.', ...result };
     }
 }

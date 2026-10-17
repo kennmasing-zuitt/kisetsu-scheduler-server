@@ -13,6 +13,7 @@ import { notFound } from '../middleware/notFound.js';
 import { apiLimiter } from '../middleware/rateLimit.js';
 import { requestId } from '../middleware/requestId.js';
 import { requestLogger } from '../middleware/requestLogger.js';
+import { verifyToken } from '../middleware/verifyToken.js';
 
 interface CreateAppOptions {
     /** Pass the HTTP server so Apollo can drain it on shutdown (omit in tests). */
@@ -43,6 +44,7 @@ export async function createApp({ httpServer }: CreateAppOptions = {}) {
     app.use(
         GRAPHQL_PATH,
         apiLimiter,
+        verifyToken, // sets req.user, or 401s on a bad/expired/revoked token
         express.json({ limit: '1mb' }),
         expressMiddleware(apollo, { context: buildContext }),
     );

@@ -27,3 +27,5 @@ export const ChangePasswordInput = z
     });
 
 export type RegisterInput = z.infer<typeof RegisterInput>;
+export type LoginInput = z.infer<typeof LoginInput>;
+export type ChangePasswordInput = z.infer<typeof ChangePasswordInput>;

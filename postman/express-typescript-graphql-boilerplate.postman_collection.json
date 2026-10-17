@@ -1,8 +1,8 @@
 {
     "info": {
-        "_postman_id": "887c57c7-bac2-47b8-9488-bcc78d2e1bda",
+        "_postman_id": "3a5009c7-0a58-490c-af3f-26c9a98f9d3c",
         "name": "express-typescript-graphql-boilerplate-server",
-        "description": "GraphQL API for **express-typescript-graphql-boilerplate-server**.\n\nEvery operation is a `POST {{baseUrl}}/graphql` with a GraphQL body. In Postman's **Body > GraphQL** tab you can click *Auto-fetch* to load the schema for autocomplete (introspection is enabled outside production).\n\n**Setup**\n1. Start the server: `npm run dev`\n2. Set `baseUrl` in the collection's **Variables** tab if you don't use port 3001.\n3. Run the whole collection (Run collection) or send requests one by one, top to bottom.\n\n**Errors** come back as HTTP 200 with an `errors` array. Check `errors[0].extensions.code` (e.g. `VALIDATION_ERROR`, `NOT_FOUND`, `EMAIL_TAKEN`) and `extensions.status` (the HTTP-equivalent status). Every request has tests that check the expected result.\n\n**Variables** set by scripts: `registerEmail` (fresh per run), `userId`, `exampleId`.",
+        "description": "GraphQL API for **express-typescript-graphql-boilerplate-server**.\n\nEvery operation is a `POST {{baseUrl}}/graphql` with a GraphQL body. In Postman's **Body > GraphQL** tab you can click *Auto-fetch* to load the schema for autocomplete (introspection is enabled outside production).\n\n**Setup**\n1. Start the server: `npm run dev`\n2. Set `baseUrl` in the collection's **Variables** tab if you don't use port 3001.\n3. Run the whole collection (Run collection) or send requests one by one, top to bottom.\n\n**Errors** come back as HTTP 200 with an `errors` array. Check `errors[0].extensions.code` (e.g. `VALIDATION_ERROR`, `NOT_FOUND`, `EMAIL_TAKEN`) and `extensions.status` (the HTTP-equivalent status). Every request has tests that check the expected result.\n\n**Auth:** protected requests use `Authorization: Bearer {{token}}`; **register**, **login** and **changePassword** save `token` automatically.\n\n**Variables** set by scripts: `registerEmail` (fresh per run), `token`, `previousToken`, `userId`, `exampleId`, and `registerPassword`/`newPassword` (swapped after a password change).",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
     "item": [
@@ -55,7 +55,10 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "Liveness check that goes through the whole GraphQL pipeline."
+                        "description": "Liveness check that goes through the whole GraphQL pipeline.",
+                        "auth": {
+                            "type": "noauth"
+                        }
                     },
                     "response": [],
                     "event": [
@@ -79,7 +82,7 @@
         },
         {
             "name": "Auth",
-            "description": "Account registration. `register` is rate limited per IP: only **failed** attempts count, up to `AUTH_RATE_LIMIT_MAX` per 15 minutes (5 in `.env.example`). Each collection run makes 2 deliberate failures, so with a limit of 5 the third run within 15 minutes will get `TOO_MANY_REQUESTS`; restart the dev server to reset the in-memory counter.",
+            "description": "Register, login, `me`, change password and logout.\n\nRun top to bottom: requests save `token` (and `previousToken`) for the ones after them. Protected requests send `Authorization: Bearer {{token}}` (see each request's **Authorization** tab).\n\n**Rate limit:** register, login and changePassword share one per-IP limiter where only **failed** attempts count, up to `AUTH_RATE_LIMIT_MAX` per 15 minutes. This folder makes 4 deliberate failures per run, so with the `.env.example` value of 5 a second run within 15 minutes gets `TOO_MANY_REQUESTS`. For local testing set `AUTH_RATE_LIMIT_MAX=50` in `.env`, or restart the dev server to reset the counter.",
             "item": [
                 {
                     "name": "register",
@@ -89,7 +92,7 @@
                         "body": {
                             "mode": "graphql",
                             "graphql": {
-                                "query": "mutation Register($input: RegisterInput!) {\n    register(input: $input) {\n        message\n        user {\n    id\n    name\n    email\n    roles {\n        key\n    }\n    createdAt\n    updatedAt\n        }\n    }\n}\n",
+                                "query": "mutation Register($input: RegisterInput!) {\n    register(input: $input) {\n        message\n    token\n    user {\n    id\n    name\n    email\n    roles {\n        key\n    }\n    createdAt\n    updatedAt\n    }\n    }\n}\n",
                                 "variables": "{\n    \"input\": {\n        \"name\": \"{{registerName}}\",\n        \"email\": \"{{registerEmail}}\",\n        \"password\": \"{{registerPassword}}\"\n    }\n}"
                             }
                         },
@@ -98,7 +101,10 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "Creates an account. Email is trimmed and lowercased; password must be 8-72 characters. (Was `POST /api/v1/auth/register`.)\n\nThe pre-request script generates a unique `registerEmail` each time."
+                        "description": "Creates an account and signs in: returns a token and the user (never the hash). Saves `{{token}}`. (Was `POST /api/v1/auth/register`.)",
+                        "auth": {
+                            "type": "noauth"
+                        }
                     },
                     "response": [],
                     "event": [
@@ -123,12 +129,13 @@
                                     "});",
                                     "",
                                     "const res = pm.response.json().data.register;",
-                                    "pm.test('returns the new user without a password', () => {",
-                                    "    pm.expect(res.message).to.eql('Registered! You can now log in.');",
+                                    "pm.test('returns a token and the new user without a password', () => {",
+                                    "    pm.expect(res.token).to.be.a('string');",
                                     "    pm.expect(res.user.email).to.eql(pm.collectionVariables.get('registerEmail'));",
                                     "    pm.expect(res.user.roles).to.eql([{ key: 'user' }]);",
                                     "    pm.expect(res.user).to.not.have.property('password');",
                                     "});",
+                                    "pm.collectionVariables.set('token', res.token);",
                                     "pm.collectionVariables.set('userId', res.user.id);"
                                 ]
                             }
@@ -143,7 +150,7 @@
                         "body": {
                             "mode": "graphql",
                             "graphql": {
-                                "query": "mutation Register($input: RegisterInput!) {\n    register(input: $input) {\n        message\n    }\n}\n",
+                                "query": "mutation Register($input: RegisterInput!) {\n    register(input: $input) {\n        token\n    }\n}\n",
                                 "variables": "{\n    \"input\": {\n        \"name\": \"{{registerName}}\",\n        \"email\": \"{{registerEmail}}\",\n        \"password\": \"{{registerPassword}}\"\n    }\n}"
                             }
                         },
@@ -152,7 +159,10 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "Re-uses the email from the previous request. Run **register** first."
+                        "description": "Re-uses the email from **register**.",
+                        "auth": {
+                            "type": "noauth"
+                        }
                     },
                     "response": [],
                     "event": [
@@ -180,7 +190,7 @@
                         "body": {
                             "mode": "graphql",
                             "graphql": {
-                                "query": "mutation Register($input: RegisterInput!) {\n    register(input: $input) {\n        message\n    }\n}\n",
+                                "query": "mutation Register($input: RegisterInput!) {\n    register(input: $input) {\n        token\n    }\n}\n",
                                 "variables": "{\n    \"input\": {\n        \"name\": \" \",\n        \"email\": \"not-an-email\",\n        \"password\": \"short\"\n    }\n}"
                             }
                         },
@@ -189,7 +199,9 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "Zod validation errors come back in `errors[0].extensions.details`."
+                        "auth": {
+                            "type": "noauth"
+                        }
                     },
                     "response": [],
                     "event": [
@@ -209,6 +221,436 @@
                                     "    const fields = pm.response.json().errors[0].extensions.details.map((i) => i.path[0]).sort();",
                                     "    pm.expect(fields).to.eql(['email', 'name', 'password']);",
                                     "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "me",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Me {\n    me {\n    id\n    name\n    email\n    roles {\n        key\n    }\n    createdAt\n    updatedAt\n    }\n}\n",
+                                "variables": "{}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "The signed-in user. Requires `Authorization: Bearer {{token}}`.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('is the registered user', () => {",
+                                    "    pm.expect(pm.response.json().data.me.email).to.eql(pm.collectionVariables.get('registerEmail'));",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "me - no token (UNAUTHENTICATED)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Me {\n    me {\n        id\n    }\n}\n",
+                                "variables": "{}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns UNAUTHENTICATED', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('UNAUTHENTICATED');",
+                                    "    pm.expect(err.extensions.status).to.eql(401);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "login",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation Login($input: LoginInput!) {\n    login(input: $input) {\n    token\n    user {\n    id\n    name\n    email\n    roles {\n        key\n    }\n    createdAt\n    updatedAt\n    }\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"email\": \"{{registerEmail}}\",\n        \"password\": \"{{registerPassword}}\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Exchanges email + password for a token. Saves `{{token}}`.",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "const res = pm.response.json().data.login;",
+                                    "pm.test('returns a token and the user', () => {",
+                                    "    pm.expect(res.token).to.be.a('string');",
+                                    "    pm.expect(res.user.email).to.eql(pm.collectionVariables.get('registerEmail'));",
+                                    "});",
+                                    "pm.collectionVariables.set('token', res.token);"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "login - wrong password (INVALID_CREDENTIALS)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation Login($input: LoginInput!) {\n    login(input: $input) {\n        token\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"email\": \"{{registerEmail}}\",\n        \"password\": \"WrongPassword1!\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "An unknown email returns exactly the same error.",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns INVALID_CREDENTIALS', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('INVALID_CREDENTIALS');",
+                                    "    pm.expect(err.extensions.status).to.eql(401);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "changePassword - wrong current password (WRONG_PASSWORD)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation ChangePassword($input: ChangePasswordInput!) {\n    changePassword(input: $input) {\n        token\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"currentPassword\": \"WrongPassword1!\",\n        \"newPassword\": \"{{newPassword}}\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns WRONG_PASSWORD', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('WRONG_PASSWORD');",
+                                    "    pm.expect(err.extensions.status).to.eql(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "changePassword",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation ChangePassword($input: ChangePasswordInput!) {\n    changePassword(input: $input) {\n    token\n    user {\n    id\n    name\n    email\n    roles {\n        key\n    }\n    createdAt\n    updatedAt\n    }\n    }\n}\n",
+                                "variables": "{\n    \"input\": {\n        \"currentPassword\": \"{{registerPassword}}\",\n        \"newPassword\": \"{{newPassword}}\"\n    }\n}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Stores the new password, signs out every other device and returns a fresh token for this one. Saves `{{token}}` and swaps `registerPassword` / `newPassword`.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "prerequest",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "// Keep the current token to prove it's revoked afterwards",
+                                    "pm.collectionVariables.set('previousToken', pm.collectionVariables.get('token'));"
+                                ]
+                            }
+                        },
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "const res = pm.response.json().data.changePassword;",
+                                    "pm.test('returns a fresh token', () => {",
+                                    "    pm.expect(res.token).to.be.a('string');",
+                                    "    pm.expect(res.token).to.not.eql(pm.collectionVariables.get('previousToken'));",
+                                    "});",
+                                    "pm.collectionVariables.set('token', res.token);",
+                                    "// Swap the passwords so the next run (and login) use the new one",
+                                    "const current = pm.collectionVariables.get('registerPassword');",
+                                    "pm.collectionVariables.set('registerPassword', pm.collectionVariables.get('newPassword'));",
+                                    "pm.collectionVariables.set('newPassword', current);"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "me - previous token after password change (UNAUTHENTICATED)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Me {\n    me {\n        id\n    }\n}\n",
+                                "variables": "{}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Tokens issued before the password change are rejected with HTTP 401.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{previousToken}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns UNAUTHENTICATED', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('UNAUTHENTICATED');",
+                                    "    pm.expect(err.extensions.status).to.eql(401);",
+                                    "});",
+                                    "",
+                                    "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "logout",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "mutation Logout {\n    logout\n}\n",
+                                "variables": "{}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "Revokes every token for this user on every device. The client should then delete its stored token.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('HTTP 200 with no GraphQL errors', () => {",
+                                    "    pm.response.to.have.status(200);",
+                                    "    pm.expect(pm.response.json().errors, JSON.stringify(pm.response.json().errors)).to.be.undefined;",
+                                    "});",
+                                    "",
+                                    "pm.test('returns true', () => pm.expect(pm.response.json().data.logout).to.eql(true));"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "me - after logout (UNAUTHENTICATED)",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": "query Me {\n    me {\n        id\n    }\n}\n",
+                                "variables": "{}"
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/graphql",
+                            "host": ["{{baseUrl}}"],
+                            "path": ["graphql"]
+                        },
+                        "description": "The token used to log out no longer works.",
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test('returns UNAUTHENTICATED', () => {",
+                                    "    const err = pm.response.json().errors?.[0];",
+                                    "    pm.expect(err, 'expected an error').to.exist;",
+                                    "    pm.expect(err.extensions.code).to.eql('UNAUTHENTICATED');",
+                                    "    pm.expect(err.extensions.status).to.eql(401);",
+                                    "});",
+                                    "",
+                                    "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
                                 ]
                             }
                         }
@@ -236,7 +678,10 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "Newest first. `page` defaults to 1, `limit` to 20 (max 100). (Was `GET /api/v1/users`.)\n\n**Note:** currently public, as the REST route was."
+                        "description": "Newest first. `page` defaults to 1, `limit` to 20 (max 100). (Was `GET /api/v1/users`.)\n\n**Note:** currently public, as the REST route was.",
+                        "auth": {
+                            "type": "noauth"
+                        }
                     },
                     "response": [],
                     "event": [
@@ -277,6 +722,9 @@
                             "raw": "{{baseUrl}}/graphql",
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "noauth"
                         }
                     },
                     "response": [],
@@ -320,7 +768,10 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "(Was `POST /api/v1/example/createExample`.) Saves the new id to `{{exampleId}}`."
+                        "description": "(Was `POST /api/v1/example/createExample`.) Saves the new id to `{{exampleId}}`.",
+                        "auth": {
+                            "type": "noauth"
+                        }
                     },
                     "response": [],
                     "event": [
@@ -362,7 +813,10 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "Newest first. (Was `GET /api/v1/example/readExample`.)"
+                        "description": "Newest first. (Was `GET /api/v1/example/readExample`.)",
+                        "auth": {
+                            "type": "noauth"
+                        }
                     },
                     "response": [],
                     "event": [
@@ -402,7 +856,10 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "Returns `null` (not an error) when the id doesn't exist."
+                        "description": "Returns `null` (not an error) when the id doesn't exist.",
+                        "auth": {
+                            "type": "noauth"
+                        }
                     },
                     "response": [],
                     "event": [
@@ -441,7 +898,10 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "Partial update: send only the fields to change (at least one). (Was `POST /api/v1/example/updateExample`.)"
+                        "description": "Partial update: send only the fields to change (at least one). (Was `POST /api/v1/example/updateExample`.)",
+                        "auth": {
+                            "type": "noauth"
+                        }
                     },
                     "response": [],
                     "event": [
@@ -482,7 +942,10 @@
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
                         },
-                        "description": "(Was `POST /api/v1/example/deleteExample`.)"
+                        "description": "(Was `POST /api/v1/example/deleteExample`.)",
+                        "auth": {
+                            "type": "noauth"
+                        }
                     },
                     "response": [],
                     "event": [
@@ -518,6 +981,9 @@
                             "raw": "{{baseUrl}}/graphql",
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "noauth"
                         }
                     },
                     "response": [],
@@ -554,6 +1020,9 @@
                             "raw": "{{baseUrl}}/graphql",
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "noauth"
                         }
                     },
                     "response": [],
@@ -590,6 +1059,9 @@
                             "raw": "{{baseUrl}}/graphql",
                             "host": ["{{baseUrl}}"],
                             "path": ["graphql"]
+                        },
+                        "auth": {
+                            "type": "noauth"
                         }
                     },
                     "response": [],
@@ -632,6 +1104,21 @@
         {
             "key": "registerPassword",
             "value": "Password123!",
+            "type": "string"
+        },
+        {
+            "key": "newPassword",
+            "value": "NewPassword456!",
+            "type": "string"
+        },
+        {
+            "key": "token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "previousToken",
+            "value": "",
             "type": "string"
         },
         {

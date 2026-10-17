@@ -4,6 +4,7 @@ import { buildSchemaSync } from 'type-graphql';
 import { mods } from '../../mods/index.js';
 import { HealthResolver } from '../../shared/graphql/health.resolver.js';
 import { DateTimeScalar } from '../../shared/graphql/scalars.js';
+import { authChecker } from './auth.js';
 
 /** Builds one executable schema from every module's type-graphql resolver classes. */
 export function buildSchema() {
@@ -13,5 +14,7 @@ export function buildSchema() {
         scalarsMap: [{ type: Date, scalar: DateTimeScalar }],
         // Input rules live in Zod schemas (see shared/validation.ts), not class-validator
         validate: false,
+        // Enables @Authorized() / @Authorized(RoleKey.appAdmin) on resolvers
+        authChecker,
     });
 }
