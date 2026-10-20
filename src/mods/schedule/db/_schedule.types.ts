@@ -1,6 +1,7 @@
 import { InferSchemaType, Require_id } from 'mongoose';
 import { BookingModel, BookingSchema } from './booking.model.js';
 import { RoomModel, RoomSchema } from './room.model.js';
+import { ServiceModel, ServiceSchema } from './service.model.js';
 import { TherapistModel, TherapistSchema } from './therapist.model.js';
 
 // ---------- Therapists ----------
@@ -36,10 +37,13 @@ export interface BookingSlot {
     roomId: string;
     start: Date;
     end: Date;
+    /** Required for new bookings; older bookings may not have one */
+    serviceId?: string;
 }
 
 export interface CreateBookingData extends BookingSlot {
     client: string;
+    serviceId: string;
     createdBy?: string;
 }
 
@@ -67,4 +71,43 @@ export interface UpcomingQuery {
     roomId?: string;
     /** Bookings ending after this instant count as upcoming */
     after: Date;
+}
+
+// ---------- Services ----------
+export type Service = Require_id<InferSchemaType<typeof ServiceSchema>>;
+
+export type ServiceDocument = InstanceType<typeof ServiceModel>;
+
+/** A price rule as written by clients (see db/service.model.ts for the meaning of each field) */
+export interface ServicePriceData {
+    durationMin: number | null;
+    days: number[];
+    amount: number;
+    validFrom: string;
+    validTo: string | null;
+}
+
+/** A stored price rule, as read back (lean documents may leave defaults undefined) */
+export interface ServicePriceRule {
+    durationMin?: number | null;
+    days?: number[];
+    amount: number;
+    validFrom: string;
+    validTo?: string | null;
+}
+
+export interface CreateServiceData {
+    name: string;
+    description: string;
+    isActive: boolean;
+    prices: ServicePriceData[];
+}
+
+export type UpdateServiceData = Partial<CreateServiceData> & { _id: string };
+
+/** What a booking is priced by: its local date, weekday and length */
+export interface PriceQuery {
+    dateKey: string;
+    weekday: number;
+    durationMin: number;
 }

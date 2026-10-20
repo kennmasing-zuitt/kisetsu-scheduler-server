@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ObjectIdSchema } from '../../../shared/validation.js';
 
 /** 0 = Sunday … 6 = Saturday (same as Date#getDay) */
-const Weekday = z.number().int().min(0).max(6);
+export const Weekday = z.number().int().min(0).max(6);
 
 /** A calendar date "YYYY-MM-DD" that actually exists */
 export const DateKey = z

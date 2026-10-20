@@ -21,4 +21,9 @@ export class BookingFieldsHandler {
     roomId(@Root() doc: Booking): string {
         return String(doc.roomId);
     }
+
+    @FieldResolver(() => ID, { nullable: true })
+    serviceId(@Root() doc: Booking): string | null {
+        return doc.serviceId ? String(doc.serviceId) : null;
+    }
 }

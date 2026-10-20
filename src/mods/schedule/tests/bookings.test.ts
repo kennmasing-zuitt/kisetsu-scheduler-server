@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { bearer, gql as rawGql } from '../../../tests/graphql.helpers.js';
 import { createRoleDoc, registerTestUser } from '../../auth/tests/auth.helpers.js';
 import { RoleKind } from '../../roles/index.js';
-import { RoomModel, TherapistModel } from '../index.js';
+import { RoomModel, ServiceModel, TherapistModel } from '../index.js';
 import { UsersOperations } from '../../users/index.js';
 
 // Times are written in the default SCHEDULE_TIMEZONE (Asia/Manila, UTC+8, no DST).
@@ -17,17 +17,27 @@ let ana = '';
 let ben = '';
 let room1 = '';
 let room2 = '';
+// Priced for any length on any day, so the scheduling tests aren't about prices
+let massage = '';
 beforeEach(async () => {
     token = (await registerTestUser({ email: 'desk@example.com' })).token;
     ana = String((await TherapistModel.create({ name: 'Ana', offDays: [0] }))._id);
     ben = String((await TherapistModel.create({ name: 'Ben', leaveDates: ['2030-01-08'] }))._id);
     room1 = String((await RoomModel.create({ name: 'Room 1', color: '#534AB7' }))._id);
     room2 = String((await RoomModel.create({ name: 'Room 2', color: '#0F6E56' }))._id);
+    massage = String(
+        (
+            await ServiceModel.create({
+                name: 'Massage',
+                prices: [{ durationMin: null, days: [], amount: 1000, validFrom: '2020-01-01' }],
+            })
+        )._id,
+    );
 });
 const gql = <T = Record<string, unknown>>(query: string, variables?: Record<string, unknown>) =>
     rawGql<T>(query, variables, bearer(token));
 
-const FIELDS = 'id client therapistId roomId start end createdAt updatedAt';
+const FIELDS = 'id client therapistId roomId serviceId start end createdAt updatedAt';
 
 const CREATE = `mutation ($input: CreateBookingInput!) { createBooking(input: $input) { ${FIELDS} } }`;
 const UPDATE = `mutation ($id: ID!, $input: UpdateBookingInput!) {
@@ -44,6 +54,7 @@ interface BookingT {
     client: string;
     therapistId: string;
     roomId: string;
+    serviceId: string | null;
     start: string;
     end: string;
 }
@@ -54,6 +65,7 @@ interface Slot {
     client?: string;
     therapistId?: string;
     roomId?: string;
+    serviceId?: string;
     start?: string;
     end?: string;
 }
@@ -62,6 +74,7 @@ const input = (slot: Slot = {}) => ({
     client: 'Mr. Cruz',
     therapistId: ana,
     roomId: room1,
+    serviceId: massage,
     start: at(MON, '15:00'),
     end: at(MON, '16:00'),
     ...slot,
@@ -258,6 +271,73 @@ describe('bookings module', () => {
 
         const badId = await gql(DELETE, { id: 'not-an-object-id' });
         expect(errorCode(badId)).toBe('VALIDATION_ERROR');
+    });
+});
+
+describe('booking prices', () => {
+    // Fuyu: 60 and 80 minutes, priced from Feb 2030 for 60 minutes only on weekends
+    let fuyu = '';
+    beforeEach(async () => {
+        fuyu = String(
+            (
+                await ServiceModel.create({
+                    name: 'Fuyu',
+                    prices: [
+                        { durationMin: 60, amount: 1099, validFrom: '2025-01-01' },
+                        { durationMin: 80, amount: 1199, validFrom: '2025-01-01' },
+                    ],
+                })
+            )._id,
+        );
+    });
+
+    it('stores the service and accepts a priced length', async () => {
+        const b = await create({ serviceId: fuyu, end: at(MON, '16:20') });
+        expect(b.serviceId).toBe(fuyu);
+    });
+
+    it('rejects a length the service has no price for, listing the priced ones', async () => {
+        const res = await gql(CREATE, { input: input({ serviceId: fuyu, end: at(MON, '16:30') }) });
+        expect(res.body.errors?.[0]).toMatchObject({
+            message: 'Fuyu has no price for 90 minutes on 2030-01-07 (available: 60, 80 minutes)',
+            extensions: { code: 'VALIDATION_ERROR' },
+        });
+    });
+
+    it('rejects dates outside every price period', async () => {
+        await ServiceModel.updateOne(
+            { _id: fuyu },
+            { $set: { 'prices.0.validFrom': '2030-02-01', 'prices.1.validFrom': '2030-02-01' } },
+        );
+        const res = await gql(CREATE, { input: input({ serviceId: fuyu }) });
+        expect(res.body.errors?.[0].message).toBe('Fuyu has no price for 60 minutes on 2030-01-07');
+    });
+
+    it('rejects resizing to an unpriced length', async () => {
+        const b = await create({ serviceId: fuyu });
+        const res = await gql(UPDATE, { id: b.id, input: { end: at(MON, '16:10') } });
+        expect(res.body.errors?.[0].extensions?.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('archived services: no new bookings, but existing ones can still move', async () => {
+        const b = await create({ serviceId: fuyu });
+        await ServiceModel.updateOne({ _id: fuyu }, { $set: { isActive: false } });
+
+        const fresh = await gql(CREATE, {
+            input: input({ serviceId: fuyu, start: at(MON, '17:00'), end: at(MON, '18:00') }),
+        });
+        expect(fresh.body.errors?.[0].message).toBe('Fuyu is no longer offered');
+
+        const moved = await gql(UPDATE, {
+            id: b.id,
+            input: { start: at(MON, '18:00'), end: at(MON, '19:00') },
+        });
+        expect(moved.body.errors).toBeUndefined();
+    });
+
+    it('rejects an unknown service', async () => {
+        const res = await gql(CREATE, { input: input({ serviceId: MISSING_ID }) });
+        expect(res.body.errors?.[0].message).toBe('Service not found');
     });
 });
 

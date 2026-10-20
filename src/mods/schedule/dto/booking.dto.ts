@@ -16,6 +16,12 @@ export class BookingObject {
     @Field(() => ID)
     roomId!: string;
 
+    @Field(() => ID, {
+        nullable: true,
+        description: 'The booked service; null only for bookings made before services existed',
+    })
+    serviceId!: string | null;
+
     @Field(() => Date)
     start!: Date;
 
@@ -55,6 +61,9 @@ export class CreateBookingInputType {
     @Field(() => ID)
     roomId!: string;
 
+    @Field(() => ID, { description: 'Must have a price for the booking length on its date' })
+    serviceId!: string;
+
     @Field(() => Date)
     start!: Date;
 
@@ -74,6 +83,9 @@ export class UpdateBookingInputType {
 
     @Field(() => ID, { nullable: true })
     roomId?: string;
+
+    @Field(() => ID, { nullable: true })
+    serviceId?: string;
 
     @Field(() => Date, { nullable: true })
     start?: Date;

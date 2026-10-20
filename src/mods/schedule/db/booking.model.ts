@@ -6,6 +6,9 @@ export const BookingSchema = new Schema(
         client: { type: String, required: true, trim: true },
         therapistId: { type: Schema.Types.ObjectId, ref: 'Therapist', required: true },
         roomId: { type: Schema.Types.ObjectId, ref: 'Room', required: true },
+        /** What was booked; priced in reports by the service's rule for the booking's date.
+         *  Not required at the schema level: bookings made before services existed have none. */
+        serviceId: { type: Schema.Types.ObjectId, ref: 'Service' },
         start: { type: Date, required: true },
         end: { type: Date, required: true },
         /** The user who made the booking */
@@ -22,6 +25,7 @@ export const BookingSchema = new Schema(
 BookingSchema.index({ start: 1, end: 1 });
 BookingSchema.index({ therapistId: 1, start: 1 });
 BookingSchema.index({ roomId: 1, start: 1 });
+BookingSchema.index({ serviceId: 1 });
 
 export type BookingSchemaType = InferSchemaType<typeof BookingSchema>;
 export const BookingModel = model('Booking', BookingSchema);

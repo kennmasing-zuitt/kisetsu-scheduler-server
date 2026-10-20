@@ -33,6 +33,11 @@ export enum Permission {
     createBooking = 'createBooking',
     updateBooking = 'updateBooking',
     deleteBooking = 'deleteBooking',
+    createService = 'createService',
+    updateService = 'updateService',
+    deleteService = 'deleteService',
+    // reports
+    readReports = 'readReports',
 }
 export const PERMISSION_VALUES = Object.values(Permission) as Permission[];
 
@@ -60,6 +65,10 @@ export const USER_PERMISSIONS: readonly Permission[] = [
     Permission.createBooking,
     Permission.updateBooking,
     Permission.deleteBooking,
+    Permission.createService,
+    Permission.updateService,
+    Permission.deleteService,
+    Permission.readReports,
 ];
 
 /**

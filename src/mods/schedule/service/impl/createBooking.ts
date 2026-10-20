@@ -8,6 +8,7 @@ export const createBooking = async (data: CreateBookingData): Promise<BookingDoc
         client: data.client,
         therapistId: data.therapistId,
         roomId: data.roomId,
+        serviceId: data.serviceId,
         start: data.start,
         end: data.end,
         createdBy: data.createdBy,
