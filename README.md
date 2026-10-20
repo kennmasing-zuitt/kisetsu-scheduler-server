@@ -302,6 +302,45 @@ Deleting a therapist or room is refused (`THERAPIST_HAS_BOOKINGS` / `ROOM_HAS_BO
 Weekdays, leave dates and opening hours are evaluated in `SCHEDULE_TIMEZONE` (default
 `Asia/Manila`), so they don't depend on the server's own time zone.
 
+## Deploying with Docker (Droplet + shared Nginx proxy)
+
+Files: `Dockerfile` (multi-stage: build with TypeScript, run `dist/` with production
+dependencies only, non-root), `docker-compose.yaml` (the API plus a MongoDB container),
+`nginx.conf` (server block for the shared proxy) and `.dockerignore`. Same layout as
+kisetsu-scheduler-client.
+
+1. **Once per Droplet**, the shared network the proxy and apps join:
+   `docker network create web` (skip if it exists).
+2. **Create `.env`** next to `docker-compose.yaml` (copy `.env.example`). It's read at runtime,
+   never baked into the image. At least set a fresh secret:
+    ```env
+    JWT_SECRET=<node -e "console.log(require('crypto').randomBytes(48).toString('hex'))">
+    AUTH_RATE_LIMIT_MAX=5
+    SCHEDULE_TIMEZONE=Asia/Manila
+    ```
+    `docker-compose.yaml` always sets `NODE_ENV=production`, `PORT=2200`, `TRUST_PROXY=1`, and:
+    - `MONGO_URI` → the bundled `mongo` container (data in the `mongo-data` volume).
+      Set `DOCKER_MONGO_URI` in `.env` to use another database (e.g. Atlas).
+    - `CORS_ORIGINS` → `https://scheduling.masings.com`. Set `DOCKER_CORS_ORIGINS` to change it.
+3. **Build and start:** `docker compose up -d --build`. The API waits for MongoDB to be
+   healthy, then creates the system roles on startup. Check with `docker compose ps` and
+   `docker compose logs -f app`.
+4. **Seed (optional, first deploy only):** the seed refuses to run in production, so run it
+   explicitly in development mode inside the container:
+   `docker compose exec -e NODE_ENV=development app node dist/scripts/seed.js`.
+   It creates the sample accounts with **known passwords**: change them (or remove the
+   accounts) right after, since the API is public.
+5. **Proxy:** copy `nginx.conf` into the proxy's `conf.d/` as `scheduling-api.conf` (serves
+   `scheduling-api.masings.com` over HTTPS with the shared `masings-apps` certificate), then
+   `docker exec <nginx-proxy> nginx -t && docker exec <nginx-proxy> nginx -s reload`.
+   Add a DNS A record for `scheduling-api.masings.com` and make sure the certificate includes it.
+6. **Client:** build kisetsu-scheduler-client with
+   `NEXT_PUBLIC_GRAPHQL_URL=https://scheduling-api.masings.com/graphql`.
+
+The proxy reaches the API by its network alias `kisetsu-scheduler-server:2200`. MongoDB is only
+on the project's private network, so it isn't reachable from the proxy or the internet. Apollo
+Sandbox and introspection are off in production.
+
 ## Errors
 
 GraphQL answers `200` with an `errors` array. Each error carries a machine-readable code and the
