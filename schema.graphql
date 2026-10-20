@@ -427,12 +427,12 @@ type Mutation {
     deleteBooking(id: ID!): Boolean!
 
     """
-    Returns true when deleted; NOT_FOUND error otherwise
+    Returns true when deleted. Errors: NOT_FOUND, ROOM_HAS_BOOKINGS (the room still has upcoming bookings)
     """
     deleteRoom(id: ID!): Boolean!
 
     """
-    Returns true when deleted; NOT_FOUND error otherwise
+    Returns true when deleted. Errors: NOT_FOUND, THERAPIST_HAS_BOOKINGS (the therapist still has upcoming bookings)
     """
     deleteTherapist(id: ID!): Boolean!
 

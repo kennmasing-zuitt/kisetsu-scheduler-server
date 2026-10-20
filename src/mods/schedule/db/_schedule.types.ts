@@ -61,3 +61,10 @@ export interface OverlapQuery {
     /** Leave this booking out (the one being edited) */
     excludeId?: string;
 }
+
+export interface UpcomingQuery {
+    therapistId?: string;
+    roomId?: string;
+    /** Bookings ending after this instant count as upcoming */
+    after: Date;
+}

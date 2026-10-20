@@ -278,9 +278,9 @@ needs a signed-in user; mutations need the permission named after them.
 | ------------------------------------------------------- | ------------- | ------------------------------------------ |
 | `therapists` / `therapist(id)`                          | `Therapist`   | `{ id, name, offDays, leaveDates }`        |
 | `createTherapist(input)` / `updateTherapist(id, input)` | `Therapist`   | lists replace the stored ones              |
-| `deleteTherapist(id)`                                   | `Boolean`     |                                            |
+| `deleteTherapist(id)`                                   | `Boolean`     | refused with upcoming bookings             |
 | `rooms` / `room(id)`                                    | `Room`        | `{ id, name, color }`                      |
-| `createRoom` / `updateRoom` / `deleteRoom`              | `Room`/`Bool` | `color` is `#RRGGBB`                       |
+| `createRoom` / `updateRoom` / `deleteRoom`              | `Room`/`Bool` | `#RRGGBB`; delete like deleteTherapist     |
 | `bookings(from, to, therapistId?, roomId?)`             | `[Booking!]!` | overlapping `[from, to)`, max 62 days      |
 | `booking(id)`                                           | `Booking`     | `{ id, client, therapistId, roomId, ... }` |
 | `createBooking(input)` / `updateBooking(id, input)`     | `Booking`     | rules below                                |
@@ -295,6 +295,9 @@ result of every update):
 - the therapist isn't on a weekly day off or on leave (`THERAPIST_UNAVAILABLE`)
 - no overlapping booking for the therapist (`THERAPIST_DOUBLE_BOOKED`) or the room (`ROOM_TAKEN`);
   back-to-back is fine
+
+Deleting a therapist or room is refused (`THERAPIST_HAS_BOOKINGS` / `ROOM_HAS_BOOKINGS`, with
+`details.upcoming`) while they have bookings that haven't ended; past bookings are kept.
 
 Weekdays, leave dates and opening hours are evaluated in `SCHEDULE_TIMEZONE` (default
 `Asia/Manila`), so they don't depend on the server's own time zone.
@@ -320,7 +323,7 @@ HTTP-equivalent status, so client logic written against the REST API maps over d
 Codes: `VALIDATION_ERROR` (Zod issues in `extensions.details`), `UNAUTHENTICATED`, `FORBIDDEN`,
 `INVALID_CREDENTIALS`, `WRONG_PASSWORD`, `IMPERSONATION_NOT_ALLOWED`, `CANNOT_IMPERSONATE_ADMIN`,
 `CANNOT_MODIFY_SELF`, `ROLE_KEY_TAKEN`, `ROLE_IN_USE`, `SYSTEM_ROLE_LOCKED`, `NOT_FOUND`, `EMAIL_TAKEN`,
-`THERAPIST_UNAVAILABLE`, `THERAPIST_DOUBLE_BOOKED`, `ROOM_TAKEN`,
+`THERAPIST_UNAVAILABLE`, `THERAPIST_DOUBLE_BOOKED`, `ROOM_TAKEN`, `THERAPIST_HAS_BOOKINGS`, `ROOM_HAS_BOOKINGS`,
 `CONFLICT`, `INVALID_ID`, `TOO_MANY_REQUESTS`, `INTERNAL_SERVER_ERROR` (message hidden in
 production), plus Apollo's own `GRAPHQL_VALIDATION_FAILED`, `BAD_USER_INPUT`, `GRAPHQL_PARSE_FAILED`.
 

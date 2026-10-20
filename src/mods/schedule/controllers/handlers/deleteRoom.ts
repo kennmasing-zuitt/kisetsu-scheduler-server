@@ -8,7 +8,8 @@ import * as ScheduleImpl from '../../service/index.js';
 export class DeleteRoomHandler {
     @Authorized(Permission.deleteRoom)
     @Mutation(() => Boolean, {
-        description: 'Returns true when deleted; NOT_FOUND error otherwise',
+        description:
+            'Returns true when deleted. Errors: NOT_FOUND, ROOM_HAS_BOOKINGS (the room still has upcoming bookings)',
     })
     async deleteRoom(@Arg('id', () => ID) id: string): Promise<boolean> {
         return ScheduleImpl.deleteRoom(parseInput(RoomIdArgs, { id }).id);
