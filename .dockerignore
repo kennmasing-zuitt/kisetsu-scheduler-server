@@ -1,0 +1,27 @@
+# Keep the build context small and secrets out of the image
+node_modules
+dist
+build
+coverage
+.git
+.gitignore
+.github
+.DS_Store
+npm-debug.log*
+*.log
+
+# Env files: settings are passed at runtime by docker-compose.yaml
+.env
+.env.*
+
+# Not needed to build or run the API
+postman
+README.md
+schema.graphql
+vitest.config.ts
+eslint.config.js
+.prettierrc
+.prettierignore
+Dockerfile
+docker-compose.yaml
+nginx.conf
