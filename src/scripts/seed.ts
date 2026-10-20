@@ -6,6 +6,7 @@ import { logger } from '../core/logger.js';
 import {
     DEFAULT_ROLE_KEY,
     DEFAULT_SCHEDULE_PERMISSIONS,
+    PERMISSION_VALUES,
     Permission,
     RoleKind,
     RoleModel,
@@ -110,6 +111,17 @@ async function seedRolesStep() {
         { $addToSet: { perms: { $each: DEFAULT_SCHEDULE_PERMISSIONS } } },
     );
     if (modifiedCount) logger.info(`Added schedule permissions to role ${DEFAULT_ROLE_KEY}`);
+
+    // `superAdmin` already implies every permission; the full list is stored on the role too so
+    // it reads explicitly in the DB and in `roles`. Written directly because the role is locked
+    // against the API, and re-run on every seed so permissions added later are picked up.
+    const superAdmin = await RoleModel.updateOne(
+        { key: SUPER_ADMIN_ROLE_KEY },
+        { $addToSet: { perms: { $each: PERMISSION_VALUES } } },
+    );
+    if (superAdmin.modifiedCount) {
+        logger.info(`Granted every permission to role ${SUPER_ADMIN_ROLE_KEY}`);
+    }
 }
 
 async function seedScheduleStep() {

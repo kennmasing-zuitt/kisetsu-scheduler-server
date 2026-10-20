@@ -6,7 +6,7 @@ export const env = cleanEnv(process.env, {
         choices: ['development', 'production', 'test'],
         default: 'development',
     }),
-    PORT: port({ default: 3000 }),
+    PORT: port({ default: 2200 }),
     LOG_LEVEL: str({
         choices: ['error', 'warn', 'info', 'http', 'verbose', 'debug', 'silly'],
         default: 'info',
@@ -22,7 +22,7 @@ export const env = cleanEnv(process.env, {
     // Lifetime of tokens issued by impersonateUser (short on purpose)
     IMPERSONATION_TOKEN_TTL: str({ default: '15m' }),
     BCRYPT_SALT_ROUNDS: num({ default: 10 }),
-    CORS_ORIGINS: commaList({ devDefault: ['http://localhost:5173'] }),
+    CORS_ORIGINS: commaList({ devDefault: ['http://localhost:2400'] }),
     AUTH_RATE_LIMIT_MAX: num({ default: 5, devDefault: 50 }),
     API_RATE_LIMIT_MAX: num({ default: 300, devDefault: 1000 }),
     TRUST_PROXY: num({ default: 0 }),
