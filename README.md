@@ -10,10 +10,10 @@ query or mutation served from a single endpoint, `POST /graphql`.
 npm install
 cp .env.example .env            # then edit MONGO_URI etc.
 npm run seed                    # roles + a super admin, support admin and regular user
-npm run dev                     # http://localhost:3000/graphql
+npm run dev                     # http://localhost:2200/graphql
 ```
 
-In development, opening `http://localhost:3000/graphql` in a browser shows **Apollo Sandbox**
+In development, opening `http://localhost:2200/graphql` in a browser shows **Apollo Sandbox**
 (an in-browser IDE with schema docs and autocomplete). It is disabled in production, along with
 introspection.
 
@@ -47,7 +47,7 @@ Print the whole schema with `npm run schema:print` (or `npm run schema:print -- 
 ### Example
 
 ```bash
-curl -s localhost:3000/graphql -H 'Content-Type: application/json' -d '{
+curl -s localhost:2200/graphql -H 'Content-Type: application/json' -d '{
   "query": "mutation ($input: RegisterInput!) { register(input: $input) { message token user { id email role { key perms } } } }",
   "variables": { "input": { "name": "Kenn", "email": "kenn@example.com", "password": "Password123!" } }
 }'
