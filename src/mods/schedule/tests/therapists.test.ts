@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { bearer, gql } from '../../../tests/graphql.helpers.js';
 import { createAdmin, registerTestUser } from '../../auth/tests/auth.helpers.js';
+import { BookingModel, RoomModel } from '../index.js';
 
 const FIELDS = 'id name offDays leaveDates createdAt updatedAt';
 const CREATE = `mutation ($input: CreateTherapistInput!) { createTherapist(input: $input) { ${FIELDS} } }`;
@@ -80,6 +81,34 @@ describe('therapists module', () => {
         expect(first.body.data?.deleteTherapist).toBe(true);
         const second = await gql(DELETE, { id: t.id }, bearer(admin));
         expect(second.body.errors?.[0].extensions?.code).toBe('NOT_FOUND');
+    });
+
+    it('deleteTherapist is refused while it has upcoming bookings, allowed with only past ones', async () => {
+        const x = await create('Ana');
+        const other = await RoomModel.create({ name: 'R', color: '#000000' });
+        const HOUR = 3_600_000;
+        // Inserted directly: these tests are about deleting, not the booking rules
+        const booking = (start: number) =>
+            BookingModel.create({
+                client: 'C',
+                therapistId: x.id,
+                roomId: other._id,
+                start: new Date(start),
+                end: new Date(start + HOUR),
+            });
+        const upcoming = await booking(Date.now() + 24 * HOUR);
+        await booking(Date.now() - 48 * HOUR);
+
+        const refused = await gql(DELETE, { id: x.id }, bearer(admin));
+        expect(refused.body.errors?.[0].extensions).toMatchObject({
+            code: 'THERAPIST_HAS_BOOKINGS',
+            status: 409,
+            details: { upcoming: 1 },
+        });
+
+        await BookingModel.deleteOne({ _id: upcoming._id });
+        const ok = await gql(DELETE, { id: x.id }, bearer(admin));
+        expect(ok.body.errors).toBeUndefined();
     });
 
     it('the default user role can edit days off but not add therapists', async () => {

@@ -1,6 +1,7 @@
 // Standard Barrel Pattern: the isolated wrapper for db/repository/. Re-exports every
 // data-access operation (operations/*) so callers never import the inner files directly:
 //   import * as ScheduleOperations from '<path>/db/repository/index.js';
+export * from './operations/countUpcomingBookings.js';
 export * from './operations/createBooking.js';
 export * from './operations/createRoom.js';
 export * from './operations/createTherapist.js';

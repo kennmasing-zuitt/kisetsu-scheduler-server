@@ -8,7 +8,8 @@ import * as ScheduleImpl from '../../service/index.js';
 export class DeleteTherapistHandler {
     @Authorized(Permission.deleteTherapist)
     @Mutation(() => Boolean, {
-        description: 'Returns true when deleted; NOT_FOUND error otherwise',
+        description:
+            'Returns true when deleted. Errors: NOT_FOUND, THERAPIST_HAS_BOOKINGS (the therapist still has upcoming bookings)',
     })
     async deleteTherapist(@Arg('id', () => ID) id: string): Promise<boolean> {
         return ScheduleImpl.deleteTherapist(parseInput(TherapistIdArgs, { id }).id);
