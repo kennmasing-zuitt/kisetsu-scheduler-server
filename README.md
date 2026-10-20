@@ -40,6 +40,7 @@ introspection.
 | `POST /api/v1/example/updateExample` | `mutation updateExample(id: ID!, input: UpdateExampleInput!)` |
 | `POST /api/v1/example/deleteExample` | `mutation deleteExample(id: ID!): Boolean!`                   |
 | `GET  /health`                       | kept as a plain liveness probe, plus `query health`           |
+| —                                    | Schedule: see [Schedule](#schedule)                           |
 
 Print the whole schema with `npm run schema:print` (or `npm run schema:print -- schema.graphql`).
 
@@ -149,7 +150,7 @@ computed in one place, `resolvePermissions()` in `src/shared/auth/permissions.ts
 - **`superAdmin`** (on an admin-kind role) implies every permission.
 - **System roles** are created on startup if missing and can't be deleted: `super-admin` (holds
   `superAdmin`; fully locked) and `user` (default for new accounts: `createExample`,
-  `updateExample`).
+  `updateExample`, `updateTherapist`, `createBooking`, `updateBooking`, `deleteBooking`).
 - **Checked on every request.** `verifyToken` loads the user and their role and computes the
   effective permissions, so changing a role, a user's role or their extras applies on the next
   request, with no re-login. `query session { effectivePerms }` tells a frontend what to show.
@@ -171,6 +172,15 @@ Defined in `src/mods/roles/db/_roles.enum.ts`:
 | `createExample`    | user  | `createExample`                          |
 | `updateExample`    | user  | `updateExample`                          |
 | `deleteExample`    | user  | `deleteExample`                          |
+| `createTherapist`  | user  | `createTherapist`                        |
+| `updateTherapist`  | user  | `updateTherapist` (days off, leave)      |
+| `deleteTherapist`  | user  | `deleteTherapist`                        |
+| `createRoom`       | user  | `createRoom`                             |
+| `updateRoom`       | user  | `updateRoom`                             |
+| `deleteRoom`       | user  | `deleteRoom`                             |
+| `createBooking`    | user  | `createBooking`                          |
+| `updateBooking`    | user  | `updateBooking`                          |
+| `deleteBooking`    | user  | `deleteBooking`                          |
 
 **Adding a permission:** add it to `Permission` (and to `ADMIN_PERMISSIONS` or
 `USER_PERMISSIONS`), put `@Authorized(Permission.yourPerm)` on the resolver, then grant it to a
@@ -193,13 +203,16 @@ Admins are ranked by what they hold. Enforced in `assertCanManageRole` and
 
 ### Seeded roles and accounts
 
-`npm run seed` creates the system roles, a custom `support` role and one account each:
+`npm run seed` creates the system roles, a custom `support` role, one account each, and the sample
+schedule (therapists Ana, Ben, Carla and Dana; Room 1–4). On a database seeded before the schedule
+existed, it also adds the schedule permissions to the `user` role (system roles are otherwise never
+overwritten):
 
 | Email                 | Password      | Role          | Effective permissions                                           |
 | --------------------- | ------------- | ------------- | --------------------------------------------------------------- |
 | `admin@example.com`   | `Admin123!`   | `super-admin` | all                                                             |
 | `support@example.com` | `Support123!` | `support`     | `readUsers`, `logoutUsers`, `impersonateUsers`, `readAuditLogs` |
-| `user@example.com`    | `User123!`    | `user`        | `createExample`, `updateExample`                                |
+| `user@example.com`    | `User123!`    | `user`        | `createExample`, `updateExample`, `updateTherapist`, bookings   |
 
 ### Upgrading an existing database
 
@@ -256,6 +269,36 @@ someone else (compromised account, departing staff, lost device). To sign **ever
 example after a suspected token leak, rotate `JWT_SECRET` and redeploy: every existing token
 becomes invalid with no database write.
 
+## Schedule
+
+`src/mods/schedule` (same layout as `_example`) holds therapists, rooms and bookings. Every query
+needs a signed-in user; mutations need the permission named after them.
+
+| Operation                                               | Returns       | Notes                                      |
+| ------------------------------------------------------- | ------------- | ------------------------------------------ |
+| `therapists` / `therapist(id)`                          | `Therapist`   | `{ id, name, offDays, leaveDates }`        |
+| `createTherapist(input)` / `updateTherapist(id, input)` | `Therapist`   | lists replace the stored ones              |
+| `deleteTherapist(id)`                                   | `Boolean`     |                                            |
+| `rooms` / `room(id)`                                    | `Room`        | `{ id, name, color }`                      |
+| `createRoom` / `updateRoom` / `deleteRoom`              | `Room`/`Bool` | `color` is `#RRGGBB`                       |
+| `bookings(from, to, therapistId?, roomId?)`             | `[Booking!]!` | overlapping `[from, to)`, max 62 days      |
+| `booking(id)`                                           | `Booking`     | `{ id, client, therapistId, roomId, ... }` |
+| `createBooking(input)` / `updateBooking(id, input)`     | `Booking`     | rules below                                |
+| `deleteBooking(id)`                                     | `Boolean`     | cancels the booking                        |
+
+**Booking rules** (`service/impl/assertBookingAllowed.ts`, checked on create and on the merged
+result of every update):
+
+- ends after it starts, at most 600 minutes (`VALIDATION_ERROR`)
+- the therapist and room exist (`NOT_FOUND`)
+- fits between `SCHEDULE_OPENING_TIME` and `SCHEDULE_CLOSING_TIME` on one day (`VALIDATION_ERROR`)
+- the therapist isn't on a weekly day off or on leave (`THERAPIST_UNAVAILABLE`)
+- no overlapping booking for the therapist (`THERAPIST_DOUBLE_BOOKED`) or the room (`ROOM_TAKEN`);
+  back-to-back is fine
+
+Weekdays, leave dates and opening hours are evaluated in `SCHEDULE_TIMEZONE` (default
+`Asia/Manila`), so they don't depend on the server's own time zone.
+
 ## Errors
 
 GraphQL answers `200` with an `errors` array. Each error carries a machine-readable code and the
@@ -277,6 +320,7 @@ HTTP-equivalent status, so client logic written against the REST API maps over d
 Codes: `VALIDATION_ERROR` (Zod issues in `extensions.details`), `UNAUTHENTICATED`, `FORBIDDEN`,
 `INVALID_CREDENTIALS`, `WRONG_PASSWORD`, `IMPERSONATION_NOT_ALLOWED`, `CANNOT_IMPERSONATE_ADMIN`,
 `CANNOT_MODIFY_SELF`, `ROLE_KEY_TAKEN`, `ROLE_IN_USE`, `SYSTEM_ROLE_LOCKED`, `NOT_FOUND`, `EMAIL_TAKEN`,
+`THERAPIST_UNAVAILABLE`, `THERAPIST_DOUBLE_BOOKED`, `ROOM_TAKEN`,
 `CONFLICT`, `INVALID_ID`, `TOO_MANY_REQUESTS`, `INTERNAL_SERVER_ERROR` (message hidden in
 production), plus Apollo's own `GRAPHQL_VALIDATION_FAILED`, `BAD_USER_INPUT`, `GRAPHQL_PARSE_FAILED`.
 

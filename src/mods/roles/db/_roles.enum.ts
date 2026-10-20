@@ -23,6 +23,16 @@ export enum Permission {
     createExample = 'createExample',
     updateExample = 'updateExample',
     deleteExample = 'deleteExample',
+    // schedule
+    createTherapist = 'createTherapist',
+    updateTherapist = 'updateTherapist',
+    deleteTherapist = 'deleteTherapist',
+    createRoom = 'createRoom',
+    updateRoom = 'updateRoom',
+    deleteRoom = 'deleteRoom',
+    createBooking = 'createBooking',
+    updateBooking = 'updateBooking',
+    deleteBooking = 'deleteBooking',
 }
 export const PERMISSION_VALUES = Object.values(Permission) as Permission[];
 
@@ -41,6 +51,26 @@ export const USER_PERMISSIONS: readonly Permission[] = [
     Permission.createExample,
     Permission.updateExample,
     Permission.deleteExample,
+    Permission.createTherapist,
+    Permission.updateTherapist,
+    Permission.deleteTherapist,
+    Permission.createRoom,
+    Permission.updateRoom,
+    Permission.deleteRoom,
+    Permission.createBooking,
+    Permission.updateBooking,
+    Permission.deleteBooking,
+];
+
+/**
+ * What the default `user` role gets for the schedule: manage bookings and therapists' days off /
+ * leave. Adding or removing therapists and rooms is granted separately (or via super admin).
+ */
+export const DEFAULT_SCHEDULE_PERMISSIONS: readonly Permission[] = [
+    Permission.updateTherapist,
+    Permission.createBooking,
+    Permission.updateBooking,
+    Permission.deleteBooking,
 ];
 
 /** System roles: always present (created on startup), can't be deleted. */
@@ -68,6 +98,10 @@ export const SYSTEM_ROLES: readonly RoleDefinition[] = [
         name: 'User',
         description: 'Default role for new accounts.',
         kind: RoleKind.user,
-        perms: [Permission.createExample, Permission.updateExample],
+        perms: [
+            Permission.createExample,
+            Permission.updateExample,
+            ...DEFAULT_SCHEDULE_PERMISSIONS,
+        ],
     },
 ];

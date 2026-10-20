@@ -5,6 +5,7 @@ import { env } from '../core/config/env.js';
 import { logger } from '../core/logger.js';
 import {
     DEFAULT_ROLE_KEY,
+    DEFAULT_SCHEDULE_PERMISSIONS,
     Permission,
     RoleKind,
     RoleModel,
@@ -13,6 +14,7 @@ import {
 } from '../mods/roles/index.js';
 import { UsersImpl, UsersOperations } from '../mods/users/index.js';
 import { AuthImpl } from '../mods/auth/index.js';
+import { RoomModel, TherapistModel } from '../mods/schedule/index.js';
 import { connectDB, disconnectDB } from '../core/loaders/connectToMongo.js';
 import { ConflictError } from '../shared/errors/AppError.js';
 
@@ -61,6 +63,21 @@ const seedUsers: SeedUser[] = [
     },
 ];
 
+// Schedule: the roster (offDays: 0 = Sunday … 6 = Saturday) and the rooms
+const seedTherapists = [
+    { name: 'Ana', offDays: [0] }, // off Sun
+    { name: 'Ben', offDays: [2, 3] }, // off Tue, Wed
+    { name: 'Carla', offDays: [1] }, // off Mon
+    { name: 'Dana', offDays: [0, 6] }, // off Sat, Sun
+];
+
+const seedRooms = [
+    { name: 'Room 1', color: '#534AB7' },
+    { name: 'Room 2', color: '#0F6E56' },
+    { name: 'Room 3', color: '#993C1D' },
+    { name: 'Room 4', color: '#993556' },
+];
+
 // ---------- Guards ----------
 const shouldReset = process.argv.includes('--reset');
 
@@ -85,6 +102,26 @@ async function seedRolesStep() {
         }
         await RoleModel.create({ ...role, isSystem: false });
         logger.info(`Seeded role ${role.key}`);
+    }
+    // ensureSystemRoles never overwrites an existing role, so a database seeded before the
+    // schedule modules existed gets the schedule permissions added to the default role here
+    const { modifiedCount } = await RoleModel.updateOne(
+        { key: DEFAULT_ROLE_KEY },
+        { $addToSet: { perms: { $each: DEFAULT_SCHEDULE_PERMISSIONS } } },
+    );
+    if (modifiedCount) logger.info(`Added schedule permissions to role ${DEFAULT_ROLE_KEY}`);
+}
+
+async function seedScheduleStep() {
+    for (const t of seedTherapists) {
+        if (await TherapistModel.exists({ name: t.name })) continue;
+        await TherapistModel.create({ ...t, leaveDates: [] });
+        logger.info(`Seeded therapist ${t.name}`);
+    }
+    for (const r of seedRooms) {
+        if (await RoomModel.exists({ name: r.name })) continue;
+        await RoomModel.create(r);
+        logger.info(`Seeded room ${r.name}`);
     }
 }
 
@@ -115,6 +152,7 @@ async function main() {
 
     if (shouldReset) await resetDatabase();
     await seedRolesStep();
+    await seedScheduleStep();
 
     let created = 0;
     let skipped = 0;
