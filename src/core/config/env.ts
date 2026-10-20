@@ -1,5 +1,5 @@
 import { cleanEnv, num, port, str } from 'envalid';
-import { commaList, mongoUri, secret } from './utils/validators.js';
+import { commaList, hhmm, mongoUri, secret, timeZone } from './utils/validators.js';
 
 export const env = cleanEnv(process.env, {
     NODE_ENV: str({
@@ -26,4 +26,9 @@ export const env = cleanEnv(process.env, {
     AUTH_RATE_LIMIT_MAX: num({ default: 5, devDefault: 50 }),
     API_RATE_LIMIT_MAX: num({ default: 300, devDefault: 1000 }),
     TRUST_PROXY: num({ default: 0 }),
+    // Schedule rules: the business's time zone (weekdays, leave dates and opening hours are
+    // evaluated in it) and the opening hours every booking must fit in
+    SCHEDULE_TIMEZONE: timeZone({ default: 'Asia/Manila' }),
+    SCHEDULE_OPENING_TIME: hhmm({ default: '10:00' }),
+    SCHEDULE_CLOSING_TIME: hhmm({ default: '22:00' }),
 });

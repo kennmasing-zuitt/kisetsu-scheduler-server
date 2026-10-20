@@ -67,7 +67,17 @@ describe('query users', () => {
         );
         const user = res.body.data!.users.data.find((u: Row) => u.email === 'test@example.com');
         expect(user).toMatchObject({
-            role: { key: 'user', perms: ['createExample', 'updateExample'] },
+            role: {
+                key: 'user',
+                perms: [
+                    'createExample',
+                    'updateExample',
+                    'updateTherapist',
+                    'createBooking',
+                    'updateBooking',
+                    'deleteBooking',
+                ],
+            },
             extraPerms: [],
         });
     });

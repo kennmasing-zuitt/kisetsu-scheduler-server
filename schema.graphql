@@ -1,5 +1,35 @@
 type Query {
     """
+    Privileged actions, newest first. Admin only.
+    """
+    auditLogs(
+        page: Int = 1
+
+        """
+        Max 100
+        """
+        limit: Int = 20
+        action: AuditAction
+        actorId: ID
+        targetId: ID
+    ): AuditLogPage!
+
+    """
+    All roles, system roles first. Requires readRoles.
+    """
+    roles: [Role!]!
+
+    """
+    One role by key. Requires readRoles.
+    """
+    role(key: String!): Role
+
+    """
+    A single example, or null if it doesn't exist
+    """
+    example(id: ID!): Example
+
+    """
     Paginated list, newest first. (was GET /api/v1/example/readExample)
     """
     examples(
@@ -12,12 +42,7 @@ type Query {
     ): ExamplePage!
 
     """
-    A single example, or null if it doesn't exist
-    """
-    example(id: ID!): Example
-
-    """
-    Paginated list of users, newest first. (was GET /api/v1/users)
+    Paginated list of users, newest first. Requires readUsers. (was GET /api/v1/users)
     """
     users(
         page: Int = 1
@@ -29,17 +54,177 @@ type Query {
     ): UserPage!
 
     """
+    The signed-in user (requires a Bearer token)
+    """
+    me: User!
+
+    """
+    The current user, their effective permissions, and any impersonating admin
+    """
+    session: Session!
+
+    """
+    A single booking, or null if it doesn't exist
+    """
+    booking(id: ID!): Booking
+
+    """
+    A single room, or null if it doesn't exist
+    """
+    room(id: ID!): Room
+
+    """
+    A single therapist, or null if it doesn't exist
+    """
+    therapist(id: ID!): Therapist
+
+    """
+    Bookings overlapping [from, to), earliest first (what a calendar view shows)
+    """
+    bookings(
+        """
+        Range start (inclusive)
+        """
+        from: DateTime!
+
+        """
+        Range end (exclusive). At most 62 days after `from`
+        """
+        to: DateTime!
+
+        """
+        Only this therapist's bookings
+        """
+        therapistId: ID
+
+        """
+        Only this room's bookings
+        """
+        roomId: ID
+    ): [Booking!]!
+
+    """
+    Every room, sorted by name
+    """
+    rooms: [Room!]!
+
+    """
+    The whole roster, sorted by name
+    """
+    therapists: [Therapist!]!
+
+    """
     Liveness check that goes through the GraphQL pipeline
     """
     health: String!
 }
 
-type ExamplePage {
-    data: [Example!]!
+type AuditLogPage {
+    data: [AuditLog!]!
     page: Int!
     limit: Int!
     total: Int!
     totalPages: Int!
+}
+
+"""
+A privileged action: who did what to whom, and why
+"""
+type AuditLog {
+    id: ID!
+    action: AuditAction!
+
+    """
+    The admin who performed the action
+    """
+    actorId: ID!
+
+    """
+    The affected user, if any
+    """
+    targetId: ID
+    reason: String
+    details: JSONObject
+    requestId: String
+    ip: String
+    createdAt: DateTime!
+}
+
+enum AuditAction {
+    impersonationStarted
+    userLoggedOut
+    userAccessChanged
+    roleCreated
+    roleUpdated
+    roleDeleted
+}
+
+"""
+The `JSONObject` scalar type represents JSON objects as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
+"""
+scalar JSONObject
+    @specifiedBy(url: "http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf")
+
+"""
+ISO-8601 date-time string
+"""
+scalar DateTime
+
+"""
+A named set of permissions assigned to users
+"""
+type Role {
+    id: ID!
+
+    """
+    Stable identifier, e.g. "support". Immutable.
+    """
+    key: String!
+    name: String!
+    description: String!
+    kind: RoleKind!
+    perms: [Permission!]!
+
+    """
+    System roles always exist and cannot be deleted
+    """
+    isSystem: Boolean!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}
+
+"""
+admin roles may hold admin permissions; user roles may not
+"""
+enum RoleKind {
+    admin
+    user
+}
+
+"""
+Granular permissions. Admin permissions (superAdmin, readUsers, manageUserAccess, readRoles, manageRoles, logoutUsers, impersonateUsers, readAuditLogs) only apply through an admin-kind role; superAdmin implies every permission.
+"""
+enum Permission {
+    superAdmin
+    readUsers
+    manageUserAccess
+    readRoles
+    manageRoles
+    logoutUsers
+    impersonateUsers
+    readAuditLogs
+    createExample
+    updateExample
+    deleteExample
+    createTherapist
+    updateTherapist
+    deleteTherapist
+    createRoom
+    updateRoom
+    deleteRoom
+    createBooking
+    updateBooking
+    deleteBooking
 }
 
 type Example {
@@ -50,10 +235,13 @@ type Example {
     updatedAt: DateTime!
 }
 
-"""
-ISO-8601 date-time string
-"""
-scalar DateTime
+type ExamplePage {
+    data: [Example!]!
+    page: Int!
+    limit: Int!
+    total: Int!
+    totalPages: Int!
+}
 
 type UserPage {
     data: [User!]!
@@ -70,30 +258,106 @@ type User {
     id: ID!
     name: String!
     email: String!
-    roles: [UserRole!]!
+
+    """
+    The user's role and its permissions
+    """
+    role: Role!
+
+    """
+    Per-user grants on top of the role
+    """
+    extraPerms: [Permission!]!
     createdAt: DateTime!
     updatedAt: DateTime!
 }
 
-type UserRole {
-    key: RoleKey!
+"""
+Who the current token belongs to and what it can do
+"""
+type Session {
+    user: User!
+
+    """
+    Permissions that actually apply (all of them for a super admin)
+    """
+    effectivePerms: [Permission!]!
+
+    """
+    Set when an admin is impersonating this user: show a banner in the UI
+    """
+    impersonatedBy: User
 }
 
-enum RoleKey {
-    appAdmin
-    user
+"""
+A client booking: one therapist, one room, one time range
+"""
+type Booking {
+    id: ID!
+    client: String!
+    therapistId: ID!
+    roomId: ID!
+    start: DateTime!
+    end: DateTime!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}
+
+"""
+A treatment room; every booking takes one
+"""
+type Room {
+    id: ID!
+    name: String!
+
+    """
+    Hex color "#RRGGBB" for its bookings on the calendar
+    """
+    color: String!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}
+
+"""
+A therapist on the roster; one calendar column each
+"""
+type Therapist {
+    id: ID!
+    name: String!
+
+    """
+    Recurring weekly days off: 0 = Sunday … 6 = Saturday
+    """
+    offDays: [Int!]!
+
+    """
+    One-off leave, as local dates "YYYY-MM-DD"
+    """
+    leaveDates: [String!]!
+    createdAt: DateTime!
+    updatedAt: DateTime!
 }
 
 type Mutation {
     """
+    Requires manageRoles. You can only include permissions you hold; admin roles need a super admin. Audited.
+    """
+    createRole(input: CreateRoleInput!): Role!
+
+    """
+    Requires manageRoles. System roles and roles still assigned to users (ROLE_IN_USE) cannot be deleted. Audited.
+    """
+    deleteRole(key: String!): Boolean!
+
+    """
+    Requires manageRoles. Changes apply to every user with the role on their next request. The super-admin role is locked. Audited.
+    """
+    updateRole(input: UpdateRoleInput!, key: String!): Role!
+
+    """
     (was POST /api/v1/example/createExample)
     """
     createExample(input: CreateExampleInput!): Example!
-
-    """
-    (was POST /api/v1/example/updateExample)
-    """
-    updateExample(input: UpdateExampleInput!, id: ID!): Example!
 
     """
     Returns true when deleted; NOT_FOUND error otherwise. (was POST /api/v1/example/deleteExample)
@@ -101,9 +365,111 @@ type Mutation {
     deleteExample(id: ID!): Boolean!
 
     """
-    Create an account. Rate limited per IP. (was POST /api/v1/auth/register)
+    (was POST /api/v1/example/updateExample)
+    """
+    updateExample(input: UpdateExampleInput!, id: ID!): Example!
+
+    """
+    Assign a user's role and per-user extra permissions. You can only grant permissions you hold, only a super admin can manage admins, and nobody can change their own access. Audited.
+    """
+    setUserAccess(input: SetUserAccessInput!, userId: ID!): User!
+
+    """
+    Requires the current password (403 WRONG_PASSWORD otherwise). Signs out every other device and returns a fresh token for this one.
+    """
+    changePassword(input: ChangePasswordInput!): AuthPayload!
+
+    """
+    Requires impersonateUsers. Returns a short-lived token that acts as a non-admin user, for support and debugging. A reason is required and recorded in the audit log.
+    """
+    impersonateUser(
+        """
+        Why: stored in the audit log (5-500 chars)
+        """
+        reason: String!
+        userId: ID!
+    ): ImpersonationPayload!
+
+    """
+    Exchange email + password for an access token. Unknown email and wrong password both return INVALID_CREDENTIALS (401). Rate limited per IP.
+    """
+    login(input: LoginInput!): AuthPayload!
+
+    """
+    Revokes every token for this user on every device (increments tokenVersion). Returns true; the client should delete its stored token.
+    """
+    logout: Boolean!
+
+    """
+    Requires logoutUsers. Signs one user out of every device (increments their tokenVersion). Returns true; NOT_FOUND if the user does not exist. Audited.
+    """
+    logoutUser(userId: ID!): Boolean!
+
+    """
+    Create an account and sign in. Rate limited per IP. (was POST /api/v1/auth/register)
     """
     register(input: RegisterInput!): RegisterPayload!
+
+    """
+    Books a therapist and a room. Errors: VALIDATION_ERROR (times, opening hours), NOT_FOUND (therapist/room), THERAPIST_UNAVAILABLE, THERAPIST_DOUBLE_BOOKED, ROOM_TAKEN
+    """
+    createBooking(input: CreateBookingInput!): Booking!
+    createRoom(input: CreateRoomInput!): Room!
+
+    """
+    Adds a therapist to the roster
+    """
+    createTherapist(input: CreateTherapistInput!): Therapist!
+
+    """
+    Cancels a booking. Returns true when deleted; NOT_FOUND error otherwise
+    """
+    deleteBooking(id: ID!): Boolean!
+
+    """
+    Returns true when deleted; NOT_FOUND error otherwise
+    """
+    deleteRoom(id: ID!): Boolean!
+
+    """
+    Returns true when deleted; NOT_FOUND error otherwise
+    """
+    deleteTherapist(id: ID!): Boolean!
+
+    """
+    Edit, move or reassign a booking. Same errors as createBooking
+    """
+    updateBooking(input: UpdateBookingInput!, id: ID!): Booking!
+    updateRoom(input: UpdateRoomInput!, id: ID!): Room!
+
+    """
+    Rename a therapist or replace their weekly days off / leave dates
+    """
+    updateTherapist(input: UpdateTherapistInput!, id: ID!): Therapist!
+}
+
+input CreateRoleInput {
+    """
+    2-40 lowercase letters, digits or dashes
+    """
+    key: String!
+    name: String!
+    description: String
+    kind: RoleKind!
+    perms: [Permission!]!
+}
+
+"""
+Only the fields you send are changed
+"""
+input UpdateRoleInput {
+    name: String
+    description: String
+
+    """
+    Replaces the existing list
+    """
+    perms: [Permission!]
 }
 
 input CreateExampleInput {
@@ -119,9 +485,68 @@ input UpdateExampleInput {
     lastName: String
 }
 
-type RegisterPayload {
-    message: String!
+input SetUserAccessInput {
+    """
+    Role key, e.g. "user" or "support"
+    """
+    role: String!
+
+    """
+    Per-user extras on top of the role. Replaces the existing list.
+    """
+    extraPerms: [Permission!] = []
+}
+
+"""
+Send the token as `Authorization: Bearer <token>` on later requests
+"""
+type AuthPayload {
+    """
+    JWT access token (HS256), expires after JWT_EXPIRES_IN
+    """
+    token: String!
     user: User!
+}
+
+input ChangePasswordInput {
+    currentPassword: String!
+
+    """
+    8-72 characters, different from the current one
+    """
+    newPassword: String!
+}
+
+"""
+A short-lived token that acts as `user`. Send it as `Authorization: Bearer <token>`.
+"""
+type ImpersonationPayload {
+    token: String!
+    expiresAt: DateTime!
+
+    """
+    The impersonated user
+    """
+    user: User!
+
+    """
+    The admin who started the session
+    """
+    impersonatedBy: ID!
+}
+
+input LoginInput {
+    email: String!
+    password: String!
+}
+
+type RegisterPayload {
+    """
+    JWT access token (HS256), expires after JWT_EXPIRES_IN
+    """
+    token: String!
+    user: User!
+    message: String!
 }
 
 input RegisterInput {
@@ -136,4 +561,51 @@ input RegisterInput {
     8-72 characters
     """
     password: String!
+}
+
+input CreateBookingInput {
+    client: String!
+    therapistId: ID!
+    roomId: ID!
+    start: DateTime!
+    end: DateTime!
+}
+
+input CreateRoomInput {
+    name: String!
+    color: String!
+}
+
+input CreateTherapistInput {
+    name: String!
+    offDays: [Int!]
+    leaveDates: [String!]
+}
+
+"""
+Only the fields you send are changed; the result must still pass every rule
+"""
+input UpdateBookingInput {
+    client: String
+    therapistId: ID
+    roomId: ID
+    start: DateTime
+    end: DateTime
+}
+
+"""
+Only the fields you send are changed
+"""
+input UpdateRoomInput {
+    name: String
+    color: String
+}
+
+"""
+Only the fields you send are changed; lists replace the stored list
+"""
+input UpdateTherapistInput {
+    name: String
+    offDays: [Int!]
+    leaveDates: [String!]
 }

@@ -48,7 +48,14 @@ describe('query roles', () => {
             undefined,
             bearer(superAdmin.token),
         );
-        expect(found.body.data?.role?.perms).toEqual(['createExample', 'updateExample']);
+        expect(found.body.data?.role?.perms).toEqual([
+            'createExample',
+            'updateExample',
+            'updateTherapist',
+            'createBooking',
+            'updateBooking',
+            'deleteBooking',
+        ]);
         const missing = await gql<{ role: RoleT | null }>(
             '{ role(key: "nope") { key } }',
             undefined,

@@ -8,6 +8,7 @@ export { RolesHandlers };
 export {
     ADMIN_PERMISSIONS,
     DEFAULT_ROLE_KEY,
+    DEFAULT_SCHEDULE_PERMISSIONS,
     PERMISSION_VALUES,
     Permission,
     ROLE_KIND_VALUES,

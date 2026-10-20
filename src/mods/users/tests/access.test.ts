@@ -5,6 +5,16 @@ import { createAdmin, createRoleDoc, registerTestUser } from '../../auth/tests/a
 import { Permission, RoleKind } from '../../roles/index.js';
 import { UserModel } from '../index.js';
 
+// The default `user` role: the example permissions plus the schedule ones
+const DEFAULT_USER_PERMS = [
+    'createExample',
+    'updateExample',
+    'updateTherapist',
+    'createBooking',
+    'updateBooking',
+    'deleteBooking',
+];
+
 const SET_ACCESS = /* GraphQL */ `
     mutation SetUserAccess($userId: ID!, $input: SetUserAccessInput!) {
         setUserAccess(userId: $userId, input: $input) {
@@ -33,16 +43,21 @@ const effectivePerms = async (token: string) =>
 describe('effective permissions', () => {
     it('are the role perms plus extraPerms; a super admin has all of them', async () => {
         const user = await registerTestUser();
-        expect(await effectivePerms(user.token)).toEqual(['createExample', 'updateExample']);
+        expect(await effectivePerms(user.token)).toEqual(DEFAULT_USER_PERMS);
 
         await UserModel.updateOne(
             { _id: user.user.id },
             { $set: { extraPerms: ['deleteExample'] } },
         );
+        // Effective permissions come back in enum order
         expect(await effectivePerms(user.token)).toEqual([
             'createExample',
             'updateExample',
             'deleteExample',
+            'updateTherapist',
+            'createBooking',
+            'updateBooking',
+            'deleteBooking',
         ]);
 
         const superAdmin = await createAdmin();
@@ -57,7 +72,7 @@ describe('effective permissions', () => {
             { _id: user.user.id },
             { $set: { extraPerms: ['readUsers', 'superAdmin'] } },
         );
-        expect(await effectivePerms(user.token)).toEqual(['createExample', 'updateExample']);
+        expect(await effectivePerms(user.token)).toEqual(DEFAULT_USER_PERMS);
     });
 });
 
