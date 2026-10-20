@@ -74,6 +74,11 @@ type Query {
     room(id: ID!): Room
 
     """
+    A single service, or null if it doesn't exist
+    """
+    service(id: ID!): Service
+
+    """
     A single therapist, or null if it doesn't exist
     """
     therapist(id: ID!): Therapist
@@ -109,9 +114,31 @@ type Query {
     rooms: [Room!]!
 
     """
+    Services sorted by name, with their prices
+    """
+    services(includeArchived: Boolean! = false): [Service!]!
+
+    """
     The whole roster, sorted by name
     """
     therapists: [Therapist!]!
+
+    """
+    Weekly, monthly or annual sales: services rendered per therapist and per service, each booking priced at the price that prevailed on its date. Requires readReports.
+    """
+    salesReport(
+        period: ReportPeriod!
+
+        """
+        Any day in the wanted week / month / year, "YYYY-MM-DD"
+        """
+        date: String!
+
+        """
+        Also count bookings that have not ended yet (default: only rendered ones)
+        """
+        includeUpcoming: Boolean! = false
+    ): SalesReport!
 
     """
     Liveness check that goes through the GraphQL pipeline
@@ -225,6 +252,10 @@ enum Permission {
     createBooking
     updateBooking
     deleteBooking
+    createService
+    updateService
+    deleteService
+    readReports
 }
 
 type Example {
@@ -297,6 +328,11 @@ type Booking {
     client: String!
     therapistId: ID!
     roomId: ID!
+
+    """
+    The booked service; null only for bookings made before services existed
+    """
+    serviceId: ID
     start: DateTime!
     end: DateTime!
     createdAt: DateTime!
@@ -319,6 +355,59 @@ type Room {
 }
 
 """
+A service clients book (Fuyu, Natsu, ...) and its prices
+"""
+type Service {
+    id: ID!
+    name: String!
+    description: String!
+
+    """
+    False = archived: not offered for new bookings, still in reports
+    """
+    isActive: Boolean!
+
+    """
+    Full price history, current and past
+    """
+    prices: [ServicePrice!]!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}
+
+"""
+One price rule. A booking takes the rule whose period contains its local date and whose days and length match it. Rules of a service never overlap.
+"""
+type ServicePrice {
+    id: ID!
+
+    """
+    Minutes this price is for; null = any length
+    """
+    durationMin: Int
+
+    """
+    Weekdays it applies to (0 = Sunday); empty = every day
+    """
+    days: [Int!]!
+
+    """
+    Price in PHP
+    """
+    amount: Float!
+
+    """
+    First day of the period, "YYYY-MM-DD" (inclusive)
+    """
+    validFrom: String!
+
+    """
+    Last day of the period (inclusive); null = still the current price
+    """
+    validTo: String
+}
+
+"""
 A therapist on the roster; one calendar column each
 """
 type Therapist {
@@ -336,6 +425,142 @@ type Therapist {
     leaveDates: [String!]!
     createdAt: DateTime!
     updatedAt: DateTime!
+}
+
+type SalesReport {
+    period: ReportPeriod!
+
+    """
+    First day, "YYYY-MM-DD"
+    """
+    from: String!
+
+    """
+    Last day, "YYYY-MM-DD" (inclusive)
+    """
+    to: String!
+    timeZone: String!
+
+    """
+    Currency of every amount, e.g. "PHP"
+    """
+    currency: String!
+    includeUpcoming: Boolean!
+    generatedAt: DateTime!
+    totals: SalesTotals!
+
+    """
+    Roster order; removed therapists last
+    """
+    therapists: [TherapistSales!]!
+    services: [ServiceSales!]!
+    series: [SalesBucket!]!
+    unpriced: [UnpricedBooking!]!
+}
+
+"""
+weekly = Monday to Sunday; monthly; annual. Dates in SCHEDULE_TIMEZONE
+"""
+enum ReportPeriod {
+    weekly
+    monthly
+    annual
+}
+
+type SalesTotals {
+    """
+    Services rendered (bookings)
+    """
+    bookings: Int!
+    minutes: Int!
+    revenue: Float!
+    unpriced: Int!
+}
+
+type TherapistSales {
+    therapistId: ID!
+    therapistName: String!
+    bookings: Int!
+    minutes: Int!
+    revenue: Float!
+
+    """
+    Bookings that added no revenue (see SalesReport.unpriced)
+    """
+    unpriced: Int!
+
+    """
+    Only services with at least one booking
+    """
+    services: [ServiceCount!]!
+    lines: [SalesLine!]!
+}
+
+"""
+How many times a therapist rendered a service
+"""
+type ServiceCount {
+    serviceId: ID!
+    serviceName: String!
+    bookings: Int!
+    revenue: Float!
+}
+
+"""
+Bookings of one service, at one length and one price
+"""
+type SalesLine {
+    serviceId: ID!
+    serviceName: String!
+    durationMin: Int!
+
+    """
+    The price that prevailed on those bookings’ dates
+    """
+    unitPrice: Float!
+    bookings: Int!
+    revenue: Float!
+}
+
+type ServiceSales {
+    serviceId: ID!
+    serviceName: String!
+    isActive: Boolean!
+    bookings: Int!
+    minutes: Int!
+    revenue: Float!
+    unpriced: Int!
+    lines: [SalesLine!]!
+}
+
+"""
+One day (weekly/monthly) or month (annual) of the chart
+"""
+type SalesBucket {
+    """
+    "YYYY-MM-DD", or "YYYY-MM" in annual reports
+    """
+    key: String!
+    bookings: Int!
+    revenue: Float!
+}
+
+type UnpricedBooking {
+    bookingId: ID!
+    client: String!
+    start: DateTime!
+    durationMin: Int!
+    therapistName: String!
+    serviceName: String
+    reason: UnpricedReason!
+}
+
+"""
+noService = booking has no service; noPrice = no price rule for its date/length
+"""
+enum UnpricedReason {
+    noService
+    noPrice
 }
 
 type Mutation {
@@ -417,6 +642,11 @@ type Mutation {
     createRoom(input: CreateRoomInput!): Room!
 
     """
+    Adds a service with its price list. Errors: VALIDATION_ERROR, SERVICE_NAME_TAKEN
+    """
+    createService(input: CreateServiceInput!): Service!
+
+    """
     Adds a therapist to the roster
     """
     createTherapist(input: CreateTherapistInput!): Therapist!
@@ -432,6 +662,11 @@ type Mutation {
     deleteRoom(id: ID!): Boolean!
 
     """
+    Deletes a service no booking uses. Errors: NOT_FOUND, SERVICE_IN_USE (archive it instead)
+    """
+    deleteService(id: ID!): Boolean!
+
+    """
     Returns true when deleted. Errors: NOT_FOUND, THERAPIST_HAS_BOOKINGS (the therapist still has upcoming bookings)
     """
     deleteTherapist(id: ID!): Boolean!
@@ -441,6 +676,11 @@ type Mutation {
     """
     updateBooking(input: UpdateBookingInput!, id: ID!): Booking!
     updateRoom(input: UpdateRoomInput!, id: ID!): Room!
+
+    """
+    Rename, archive (isActive: false) or replace the price list. Reports are priced from the list as it is when they run, so editing an old period corrects past reports.
+    """
+    updateService(input: UpdateServiceInput!, id: ID!): Service!
 
     """
     Rename a therapist or replace their weekly days off / leave dates
@@ -567,6 +807,11 @@ input CreateBookingInput {
     client: String!
     therapistId: ID!
     roomId: ID!
+
+    """
+    Must have a price for the booking length on its date
+    """
+    serviceId: ID!
     start: DateTime!
     end: DateTime!
 }
@@ -574,6 +819,36 @@ input CreateBookingInput {
 input CreateRoomInput {
     name: String!
     color: String!
+}
+
+input CreateServiceInput {
+    name: String!
+    description: String
+    isActive: Boolean = true
+    prices: [ServicePriceInput!]!
+}
+
+input ServicePriceInput {
+    """
+    Minutes; leave out for any length
+    """
+    durationMin: Int
+
+    """
+    Weekdays (0 = Sunday); leave out for every day
+    """
+    days: [Int!]
+    amount: Float!
+
+    """
+    "YYYY-MM-DD"
+    """
+    validFrom: String!
+
+    """
+    "YYYY-MM-DD"; leave out while current
+    """
+    validTo: String
 }
 
 input CreateTherapistInput {
@@ -589,6 +864,7 @@ input UpdateBookingInput {
     client: String
     therapistId: ID
     roomId: ID
+    serviceId: ID
     start: DateTime
     end: DateTime
 }
@@ -599,6 +875,16 @@ Only the fields you send are changed
 input UpdateRoomInput {
     name: String
     color: String
+}
+
+"""
+Only the fields you send are changed; `prices` replaces the whole price list
+"""
+input UpdateServiceInput {
+    name: String
+    description: String
+    isActive: Boolean
+    prices: [ServicePriceInput!]
 }
 
 """

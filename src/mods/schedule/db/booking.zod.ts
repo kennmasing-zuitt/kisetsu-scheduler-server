@@ -11,6 +11,7 @@ const fields = {
     client: z.string().trim().min(1).max(200),
     therapistId: ObjectIdSchema,
     roomId: ObjectIdSchema,
+    serviceId: ObjectIdSchema,
     start: z.date(),
     end: z.date(),
 };

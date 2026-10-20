@@ -15,7 +15,7 @@ import {
 } from '../mods/roles/index.js';
 import { UsersImpl, UsersOperations } from '../mods/users/index.js';
 import { AuthImpl } from '../mods/auth/index.js';
-import { RoomModel, TherapistModel } from '../mods/schedule/index.js';
+import { RoomModel, ServiceModel, TherapistModel } from '../mods/schedule/index.js';
 import { connectDB, disconnectDB } from '../core/loaders/connectToMongo.js';
 import { ConflictError } from '../shared/errors/AppError.js';
 
@@ -79,6 +79,38 @@ const seedRooms = [
     { name: 'Room 4', color: '#993556' },
 ];
 
+// Services and their prices. Each price is valid from PRICES_FROM with no end date; when a
+// price changes, end the old rule the day before and add a new one (Therapists & rooms page).
+const PRICES_FROM = '2025-01-01';
+const MON_TO_THU = [1, 2, 3, 4];
+const FRI_TO_SUN = [0, 5, 6];
+const seedServices = [
+    {
+        name: 'Fuyu',
+        prices: [
+            { durationMin: 60, amount: 1099 },
+            { durationMin: 80, amount: 1199 },
+        ],
+    },
+    {
+        name: 'Natsu',
+        prices: [
+            { durationMin: 60, amount: 1299 },
+            { durationMin: 80, amount: 1399 },
+        ],
+    },
+    { name: 'Haru', prices: [{ durationMin: 80, amount: 1599 }] },
+    { name: 'Shiki', prices: [{ durationMin: 120, amount: 2499 }] },
+    {
+        // Any length; priced by weekday
+        name: 'Aki',
+        prices: [
+            { days: MON_TO_THU, amount: 699 },
+            { days: FRI_TO_SUN, amount: 799 },
+        ],
+    },
+];
+
 // ---------- Guards ----------
 const shouldReset = process.argv.includes('--reset');
 
@@ -134,6 +166,25 @@ async function seedScheduleStep() {
         if (await RoomModel.exists({ name: r.name })) continue;
         await RoomModel.create(r);
         logger.info(`Seeded room ${r.name}`);
+    }
+    for (const svc of seedServices) {
+        // Names are unique ignoring case; never overwrite prices someone has edited
+        const exists = await ServiceModel.exists({ name: svc.name }).collation({
+            locale: 'en',
+            strength: 2,
+        });
+        if (exists) continue;
+        await ServiceModel.create({
+            name: svc.name,
+            prices: svc.prices.map((p) => ({
+                durationMin: null,
+                days: [],
+                ...p,
+                validFrom: PRICES_FROM,
+                validTo: null,
+            })),
+        });
+        logger.info(`Seeded service ${svc.name}`);
     }
 }
 

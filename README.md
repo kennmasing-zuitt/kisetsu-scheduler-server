@@ -181,6 +181,10 @@ Defined in `src/mods/roles/db/_roles.enum.ts`:
 | `createBooking`    | user  | `createBooking`                          |
 | `updateBooking`    | user  | `updateBooking`                          |
 | `deleteBooking`    | user  | `deleteBooking`                          |
+| `createService`    | user  | `createService`                          |
+| `updateService`    | user  | `updateService` (prices, archive)        |
+| `deleteService`    | user  | `deleteService` (never-booked only)      |
+| `readReports`      | user  | `salesReport`                            |
 
 **Adding a permission:** add it to `Permission` (and to `ADMIN_PERMISSIONS` or
 `USER_PERMISSIONS`), put `@Authorized(Permission.yourPerm)` on the resolver, then grant it to a
@@ -203,8 +207,9 @@ Admins are ranked by what they hold. Enforced in `assertCanManageRole` and
 
 ### Seeded roles and accounts
 
-`npm run seed` creates the system roles, a custom `support` role, one account each, and the sample
-schedule (therapists Ana, Ben, Carla and Dana; Room 1–4). On a database seeded before the schedule
+`npm run seed` creates the system roles, a custom `support` role, one account each, the sample
+schedule (therapists Ana, Ben, Carla and Dana; Room 1–4) and the five services with their prices
+(valid from 2025-01-01; existing services are never overwritten). On a database seeded before the schedule
 existed, it also adds the schedule permissions to the `user` role (system roles are otherwise never
 overwritten):
 
@@ -286,6 +291,45 @@ needs a signed-in user; mutations need the permission named after them.
 | `createBooking(input)` / `updateBooking(id, input)`     | `Booking`     | rules below                                |
 | `deleteBooking(id)`                                     | `Boolean`     | cancels the booking                        |
 
+### Services and prices
+
+A `Service` (Fuyu, Natsu, Haru, Shiki, Aki) holds a list of **price rules**:
+
+| Field         | Meaning                                                                      |
+| ------------- | ---------------------------------------------------------------------------- |
+| `durationMin` | length the price is for (60, 80, …); `null` = any length (Aki)               |
+| `days`        | weekdays it applies to, 0 = Sunday; `[]` = every day (Aki: Mon–Thu, Fri–Sun) |
+| `amount`      | price in PHP                                                                 |
+| `validFrom`   | first day of the price period, `YYYY-MM-DD` in `SCHEDULE_TIMEZONE`           |
+| `validTo`     | last day (inclusive); `null` = still the current price                       |
+
+Rules of a service may not overlap (same period, days and length), so a booking matches at most
+one. **To change a price**, set `validTo` on the current rule to the last day of the old price and
+add a rule with the new amount from the next day. Nothing is stored on the bookings: reports look
+up the rule for each booking's date every time they run, so a 2025 report uses 2025 prices, and
+correcting an old period corrects old reports. A service that has bookings can't be deleted
+(`SERVICE_IN_USE`); archive it with `updateService(isActive: false)` instead.
+
+| Operation                                           | Notes                            |
+| --------------------------------------------------- | -------------------------------- |
+| `services(includeArchived)` / `service(id)`         | signed-in users                  |
+| `createService(input)` / `updateService(id, input)` | `prices` replaces the whole list |
+| `deleteService(id)`                                 | only never-booked services       |
+
+Bookings now need a `serviceId`, and the service must have a price for the booking's length on
+its date (`VALIDATION_ERROR` "Fuyu has no price for 90 minutes on … (available: 60, 80 minutes)").
+Bookings made before services existed have none and show up as unpriced in reports.
+
+### Sales reports
+
+`salesReport(period: weekly | monthly | annual, date: "YYYY-MM-DD", includeUpcoming = false)`
+(`src/mods/reports`, needs `readReports`) covers the week (Monday–Sunday), month or year that
+contains `date`. Each booking counts on the day it starts and is priced at the rule that
+prevailed on that day. It returns totals, per-therapist service counts and revenue, per-service
+totals, `lines` showing each (service, length, price) combination, a chart `series` (days, or
+months for annual) and the bookings that couldn't be priced (`noService`, `noPrice`). By default
+only bookings that have ended count (services rendered); `includeUpcoming` adds the rest.
+
 **Booking rules** (`service/impl/assertBookingAllowed.ts`, checked on create and on the merged
 result of every update):
 
@@ -295,6 +339,8 @@ result of every update):
 - the therapist isn't on a weekly day off or on leave (`THERAPIST_UNAVAILABLE`)
 - no overlapping booking for the therapist (`THERAPIST_DOUBLE_BOOKED`) or the room (`ROOM_TAKEN`);
   back-to-back is fine
+- the service exists, is offered (archived services stay on bookings that already have them) and
+  has a price for that length on that date (`VALIDATION_ERROR`)
 
 Deleting a therapist or room is refused (`THERAPIST_HAS_BOOKINGS` / `ROOM_HAS_BOOKINGS`, with
 `details.upcoming`) while they have bookings that haven't ended; past bookings are kept.
@@ -362,7 +408,7 @@ HTTP-equivalent status, so client logic written against the REST API maps over d
 Codes: `VALIDATION_ERROR` (Zod issues in `extensions.details`), `UNAUTHENTICATED`, `FORBIDDEN`,
 `INVALID_CREDENTIALS`, `WRONG_PASSWORD`, `IMPERSONATION_NOT_ALLOWED`, `CANNOT_IMPERSONATE_ADMIN`,
 `CANNOT_MODIFY_SELF`, `ROLE_KEY_TAKEN`, `ROLE_IN_USE`, `SYSTEM_ROLE_LOCKED`, `NOT_FOUND`, `EMAIL_TAKEN`,
-`THERAPIST_UNAVAILABLE`, `THERAPIST_DOUBLE_BOOKED`, `ROOM_TAKEN`, `THERAPIST_HAS_BOOKINGS`, `ROOM_HAS_BOOKINGS`,
+`THERAPIST_UNAVAILABLE`, `THERAPIST_DOUBLE_BOOKED`, `ROOM_TAKEN`, `THERAPIST_HAS_BOOKINGS`, `ROOM_HAS_BOOKINGS`, `SERVICE_NAME_TAKEN`, `SERVICE_IN_USE`,
 `CONFLICT`, `INVALID_ID`, `TOO_MANY_REQUESTS`, `INTERNAL_SERVER_ERROR` (message hidden in
 production), plus Apollo's own `GRAPHQL_VALIDATION_FAILED`, `BAD_USER_INPUT`, `GRAPHQL_PARSE_FAILED`.
 

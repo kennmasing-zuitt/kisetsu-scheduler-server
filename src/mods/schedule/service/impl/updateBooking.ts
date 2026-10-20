@@ -15,8 +15,12 @@ export const updateBooking = async (data: UpdateBookingData): Promise<Booking> =
             roomId: data.roomId ?? String(current.roomId),
             start: data.start ?? current.start,
             end: data.end ?? current.end,
+            serviceId:
+                data.serviceId ?? (current.serviceId ? String(current.serviceId) : undefined),
         },
         data._id,
+        // Moving a booking whose service was archived since is fine; picking it anew is not
+        { allowArchivedService: !data.serviceId || data.serviceId === String(current.serviceId) },
     );
 
     const updatedBooking = await ScheduleOperations.updateBooking({
@@ -24,6 +28,7 @@ export const updateBooking = async (data: UpdateBookingData): Promise<Booking> =
         client: data.client,
         therapistId: data.therapistId,
         roomId: data.roomId,
+        serviceId: data.serviceId,
         start: data.start,
         end: data.end,
     });
