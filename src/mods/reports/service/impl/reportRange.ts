@@ -8,10 +8,17 @@ export interface ReportRange {
     to: string;
     /** The day after the last one */
     toExclusive: string;
-    /** Chart buckets in order: days for weekly/monthly, months ("YYYY-MM") for annual */
+    /** Chart buckets in order: hours ("YYYY-MM-DDTHH") for daily, days for weekly/monthly,
+     *  months ("YYYY-MM") for annual */
     bucketKeys: string[];
-    /** The bucket a local date falls in */
-    bucketOf: (dateKey: string) => string;
+    /** The bucket of a local date and time (minutes since midnight) */
+    bucketOf: (dateKey: string, minutes: number) => string;
+}
+
+/** Opening hours, in minutes since midnight: the hours a daily chart shows */
+export interface OpeningHours {
+    opens: number;
+    closes: number;
 }
 
 const daysBetween = (from: string, toExclusive: string): string[] => {
@@ -22,13 +29,34 @@ const daysBetween = (from: string, toExclusive: string): string[] => {
 
 /**
  * The calendar window of a report containing `date`:
+ *   daily   -> that day, charted per hour of opening hours
  *   weekly  -> Monday to Sunday
  *   monthly -> the 1st to the last day of the month
  *   annual  -> January 1st to December 31st
  */
-export function reportRange(period: ReportPeriod, date: string): ReportRange {
+export function reportRange(
+    period: ReportPeriod,
+    date: string,
+    hours: OpeningHours = { opens: 0, closes: 24 * 60 },
+): ReportRange {
     const [y, m] = date.split('-').map(Number);
     const pad = (n: number) => String(n).padStart(2, '0');
+
+    if (period === ReportPeriod.daily) {
+        const first = Math.floor(hours.opens / 60);
+        const last = Math.ceil(hours.closes / 60) - 1; // closing at 22:00 -> last hour 21:00
+        const hourKey = (h: number) => `${date}T${pad(h)}`;
+        return {
+            from: date,
+            to: date,
+            toExclusive: addDays(date, 1),
+            bucketKeys: Array.from({ length: Math.max(0, last - first + 1) }, (_, i) =>
+                hourKey(first + i),
+            ),
+            // Bookings outside opening hours still count in the totals, just not in the chart
+            bucketOf: (_d, minutes) => hourKey(Math.floor(minutes / 60)),
+        };
+    }
 
     if (period === ReportPeriod.weekly) {
         const from = addDays(date, -((weekdayOf(date) + 6) % 7)); // back to Monday

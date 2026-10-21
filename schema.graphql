@@ -124,13 +124,13 @@ type Query {
     therapists: [Therapist!]!
 
     """
-    Weekly, monthly or annual sales: services rendered per therapist and per service, each booking priced at the price that prevailed on its date. Requires readReports.
+    Daily, weekly, monthly or annual sales: services rendered per therapist and per service, each booking priced at the price that prevailed on its date. Requires readReports.
     """
     salesReport(
         period: ReportPeriod!
 
         """
-        Any day in the wanted week / month / year, "YYYY-MM-DD"
+        The day, or any day in the wanted week / month / year, "YYYY-MM-DD"
         """
         date: String!
 
@@ -459,9 +459,10 @@ type SalesReport {
 }
 
 """
-weekly = Monday to Sunday; monthly; annual. Dates in SCHEDULE_TIMEZONE
+daily (charted per hour); weekly = Monday to Sunday; monthly; annual. Dates in SCHEDULE_TIMEZONE
 """
 enum ReportPeriod {
+    daily
     weekly
     monthly
     annual
@@ -534,11 +535,11 @@ type ServiceSales {
 }
 
 """
-One day (weekly/monthly) or month (annual) of the chart
+One hour (daily), day (weekly/monthly) or month (annual) of the chart
 """
 type SalesBucket {
     """
-    "YYYY-MM-DD", or "YYYY-MM" in annual reports
+    "YYYY-MM-DDTHH" (daily), "YYYY-MM-DD" (weekly, monthly) or "YYYY-MM" (annual)
     """
     key: String!
     bookings: Int!
