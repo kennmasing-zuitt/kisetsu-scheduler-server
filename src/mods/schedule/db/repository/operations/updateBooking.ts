@@ -1,11 +1,11 @@
-import type { Booking, UpdateBookingData } from '../../_schedule.types.js';
+import type { Booking, BookingRecordPatch } from '../../_schedule.types.js';
 import { BookingModel } from '../../booking.model.js';
 
 export const updateBooking = async ({
     _id,
     ...fields
-}: UpdateBookingData): Promise<Booking | null> => {
-    // Only $set the fields that were actually provided
+}: BookingRecordPatch): Promise<Booking | null> => {
+    // Only $set the fields that were actually provided (null is a value: it removes a promo)
     const $set = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
     return BookingModel.findByIdAndUpdate(
         _id,

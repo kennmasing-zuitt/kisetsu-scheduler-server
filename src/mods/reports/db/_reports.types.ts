@@ -4,8 +4,12 @@ import type { ReportPeriod, UnpricedReason } from './_reports.enum.js';
 export interface ReportBooking {
     _id: unknown;
     client: string;
+    clientId?: unknown;
+    clientMobile?: string | null;
     therapistId: unknown;
     serviceId?: unknown;
+    isRequested?: boolean;
+    promoId?: unknown;
     start: Date;
     end: Date;
 }
@@ -19,14 +23,23 @@ export interface BookingWindow {
     endedBy?: Date;
 }
 
+/**
+ * Money in a report: `grossRevenue` at the prevailing prices, `discounts` from promos, and
+ * `revenue` = gross − discounts (net, what was actually charged).
+ */
+export interface Money {
+    grossRevenue: number;
+    discounts: number;
+    revenue: number;
+}
+
 /** One (service, length, price) combination: shows which price was applied */
-export interface SalesLine {
+export interface SalesLine extends Money {
     serviceId: string;
     serviceName: string;
     durationMin: number;
     unitPrice: number;
     bookings: number;
-    revenue: number;
 }
 
 export interface ServiceCount {
@@ -36,25 +49,27 @@ export interface ServiceCount {
     revenue: number;
 }
 
-export interface TherapistSales {
+export interface TherapistSales extends Money {
     therapistId: string;
     therapistName: string;
     bookings: number;
     minutes: number;
-    revenue: number;
     unpriced: number;
+    /** Bookings where the client asked for this therapist by name */
+    requested: number;
+    /** requested / bookings (0 when there are none) */
+    requestRate: number;
     /** Services rendered by this therapist (only those with at least one booking) */
     services: ServiceCount[];
     lines: SalesLine[];
 }
 
-export interface ServiceSales {
+export interface ServiceSales extends Money {
     serviceId: string;
     serviceName: string;
     isActive: boolean;
     bookings: number;
     minutes: number;
-    revenue: number;
     unpriced: number;
     lines: SalesLine[];
 }
@@ -77,11 +92,45 @@ export interface UnpricedBooking {
     reason: UnpricedReason;
 }
 
-export interface SalesTotals {
+export interface SalesTotals extends Money {
     bookings: number;
     minutes: number;
-    revenue: number;
     unpriced: number;
+    /** Bookings where the client asked for the therapist by name */
+    requested: number;
+}
+
+/** How often a promo code was used in the period and how much it gave away */
+export interface PromoSales {
+    promoId: string;
+    code: string;
+    bookings: number;
+    discounts: number;
+}
+
+export interface TopClient {
+    clientId: string;
+    name: string;
+    mobile: string;
+    /** Bookings in the period */
+    bookings: number;
+    /** Net revenue in the period */
+    revenue: number;
+    /** Visits ever (ended bookings), to spot regulars */
+    totalVisits: number;
+}
+
+export interface ClientSummary {
+    /** Different clients (by mobile) with a booking in the period */
+    uniqueClients: number;
+    /** …whose first booking ever is in the period */
+    newClients: number;
+    /** …who had booked before the period */
+    returningClients: number;
+    /** Bookings without a client (made before clients existed) */
+    noClient: number;
+    /** Most bookings in the period first (up to 10) */
+    top: TopClient[];
 }
 
 export interface SalesReport {
@@ -99,6 +148,8 @@ export interface SalesReport {
     services: ServiceSales[];
     series: SalesBucket[];
     unpriced: UnpricedBooking[];
+    promos: PromoSales[];
+    clients: ClientSummary;
 }
 
 export interface SalesReportRequest {

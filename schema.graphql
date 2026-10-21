@@ -69,6 +69,16 @@ type Query {
     booking(id: ID!): Booking
 
     """
+    A client, or null if it doesn't exist
+    """
+    client(id: ID!): Client
+
+    """
+    The client with this mobile (any accepted format), or null when the number is new. VALIDATION_ERROR for numbers that are not valid mobiles.
+    """
+    clientByMobile(mobile: String!): Client
+
+    """
     A single room, or null if it doesn't exist
     """
     room(id: ID!): Room
@@ -109,6 +119,44 @@ type Query {
     ): [Booking!]!
 
     """
+    A client's bookings, newest first
+    """
+    clientBookings(
+        clientId: ID!
+
+        """
+        Max 100
+        """
+        limit: Int = 20
+    ): [Booking!]!
+
+    """
+    Clients by name or mobile, with visit counts
+    """
+    clients(
+        """
+        Name words or 3+ digits of the mobile
+        """
+        search: String
+        page: Int = 1
+
+        """
+        Max 100
+        """
+        limit: Int = 20
+    ): ClientPage!
+
+    """
+    Promo codes, with how often each was used
+    """
+    promos(includeArchived: Boolean! = false): [Promo!]!
+
+    """
+    A promo by code (case doesn’t matter)
+    """
+    promo(code: String!): Promo
+
+    """
     Every room, sorted by name
     """
     rooms: [Room!]!
@@ -124,7 +172,7 @@ type Query {
     therapists: [Therapist!]!
 
     """
-    Daily, weekly, monthly or annual sales: services rendered per therapist and per service, each booking priced at the price that prevailed on its date. Requires readReports.
+    Daily, weekly, monthly or annual sales: services rendered per therapist and per service, each booking priced at the price that prevailed on its date, less its promo discount. Requires readReports.
     """
     salesReport(
         period: ReportPeriod!
@@ -256,6 +304,11 @@ enum Permission {
     updateService
     deleteService
     readReports
+    readClients
+    updateClient
+    createPromo
+    updatePromo
+    deletePromo
 }
 
 type Example {
@@ -325,7 +378,32 @@ A client booking: one therapist, one room, one time range
 """
 type Booking {
     id: ID!
+
+    """
+    The client's name (kept in sync with the Client record)
+    """
     client: String!
+
+    """
+    Null only for bookings made before clients existed
+    """
+    clientId: ID
+
+    """
+    Canonical form, e.g. "+639171234567"
+    """
+    clientMobile: String
+
+    """
+    The client asked for this therapist by name
+    """
+    isRequested: Boolean!
+    promoId: ID
+
+    """
+    The promo code applied, if any
+    """
+    promoCode: String
     therapistId: ID!
     roomId: ID!
 
@@ -337,6 +415,50 @@ type Booking {
     end: DateTime!
     createdAt: DateTime!
     updatedAt: DateTime!
+}
+
+"""
+A spa client, identified by mobile number
+"""
+type Client {
+    id: ID!
+
+    """
+    Canonical form, e.g. "+639171234567"
+    """
+    mobile: String!
+    firstName: String!
+    lastName: String!
+    fullName: String!
+    notes: String!
+    stats: ClientStats!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}
+
+"""
+Counted from bookings. A visit is a booking that has ended (service rendered).
+"""
+type ClientStats {
+    visits: Int!
+
+    """
+    Bookings that have not ended yet
+    """
+    upcoming: Int!
+    firstVisit: DateTime
+    lastVisit: DateTime
+
+    """
+    Visits where the client asked for the therapist by name
+    """
+    requested: Int!
+
+    """
+    The therapist the client has seen most
+    """
+    favouriteTherapistId: ID
+    favouriteTherapistName: String
 }
 
 """
@@ -427,6 +549,65 @@ type Therapist {
     updatedAt: DateTime!
 }
 
+type ClientPage {
+    data: [Client!]!
+    page: Int!
+    limit: Int!
+    total: Int!
+    totalPages: Int!
+}
+
+"""
+A promo code (one per booking). Its terms lock once a booking uses it; it can be archived or activated any time.
+"""
+type Promo {
+    id: ID!
+    code: String!
+    description: String!
+    discountType: DiscountType!
+
+    """
+    Percent or pesos, depending on discountType
+    """
+    value: Float!
+
+    """
+    First day it can be used, "YYYY-MM-DD"
+    """
+    validFrom: String!
+
+    """
+    Last day; null = no end
+    """
+    validTo: String
+
+    """
+    Services it applies to; empty = every service
+    """
+    serviceIds: [ID!]!
+    isActive: Boolean!
+
+    """
+    Bookings that used it
+    """
+    timesUsed: Int!
+
+    """
+    Used at least once: code, discount and services are fixed
+    """
+    isLocked: Boolean!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}
+
+"""
+percent = value % off the price; amount = value pesos off (capped at the price)
+"""
+enum DiscountType {
+    percent
+    amount
+}
+
 type SalesReport {
     period: ReportPeriod!
 
@@ -456,6 +637,12 @@ type SalesReport {
     services: [ServiceSales!]!
     series: [SalesBucket!]!
     unpriced: [UnpricedBooking!]!
+
+    """
+    Most used first
+    """
+    promos: [PromoSales!]!
+    clients: ClientSummary!
 }
 
 """
@@ -474,8 +661,27 @@ type SalesTotals {
     """
     bookings: Int!
     minutes: Int!
+
+    """
+    At the prevailing prices
+    """
+    grossRevenue: Float!
+
+    """
+    Promo discounts
+    """
+    discounts: Float!
+
+    """
+    Net: grossRevenue − discounts (what was charged)
+    """
     revenue: Float!
     unpriced: Int!
+
+    """
+    Bookings where the client asked for the therapist by name
+    """
+    requested: Int!
 }
 
 type TherapistSales {
@@ -483,12 +689,36 @@ type TherapistSales {
     therapistName: String!
     bookings: Int!
     minutes: Int!
+
+    """
+    At the prevailing prices
+    """
+    grossRevenue: Float!
+
+    """
+    Promo discounts
+    """
+    discounts: Float!
+
+    """
+    Net: grossRevenue − discounts
+    """
     revenue: Float!
 
     """
     Bookings that added no revenue (see SalesReport.unpriced)
     """
     unpriced: Int!
+
+    """
+    Bookings where the client asked for this therapist by name
+    """
+    requested: Int!
+
+    """
+    requested / bookings, 0–1
+    """
+    requestRate: Float!
 
     """
     Only services with at least one booking
@@ -520,6 +750,20 @@ type SalesLine {
     """
     unitPrice: Float!
     bookings: Int!
+
+    """
+    unitPrice × bookings
+    """
+    grossRevenue: Float!
+
+    """
+    Promo discounts
+    """
+    discounts: Float!
+
+    """
+    Net: grossRevenue − discounts
+    """
     revenue: Float!
 }
 
@@ -529,6 +773,12 @@ type ServiceSales {
     isActive: Boolean!
     bookings: Int!
     minutes: Int!
+    grossRevenue: Float!
+    discounts: Float!
+
+    """
+    Net: grossRevenue − discounts
+    """
     revenue: Float!
     unpriced: Int!
     lines: [SalesLine!]!
@@ -562,6 +812,68 @@ noService = booking has no service; noPrice = no price rule for its date/length
 enum UnpricedReason {
     noService
     noPrice
+}
+
+"""
+A promo code used in the period
+"""
+type PromoSales {
+    promoId: ID!
+    code: String!
+    bookings: Int!
+
+    """
+    Total discount given
+    """
+    discounts: Float!
+}
+
+type ClientSummary {
+    """
+    Different clients (by mobile) in the period
+    """
+    uniqueClients: Int!
+
+    """
+    Whose first booking ever is in the period
+    """
+    newClients: Int!
+
+    """
+    Who had booked before the period
+    """
+    returningClients: Int!
+
+    """
+    Bookings without a client (made before clients existed)
+    """
+    noClient: Int!
+
+    """
+    Most bookings in the period first (up to 10)
+    """
+    top: [TopClient!]!
+}
+
+type TopClient {
+    clientId: ID!
+    name: String!
+    mobile: String!
+
+    """
+    Bookings in the period
+    """
+    bookings: Int!
+
+    """
+    Net revenue in the period
+    """
+    revenue: Float!
+
+    """
+    Visits ever (ended bookings)
+    """
+    totalVisits: Int!
 }
 
 type Mutation {
@@ -640,6 +952,11 @@ type Mutation {
     Books a therapist and a room. Errors: VALIDATION_ERROR (times, opening hours), NOT_FOUND (therapist/room), THERAPIST_UNAVAILABLE, THERAPIST_DOUBLE_BOOKED, ROOM_TAKEN
     """
     createBooking(input: CreateBookingInput!): Booking!
+
+    """
+    Errors: VALIDATION_ERROR, PROMO_CODE_TAKEN
+    """
+    createPromo(input: CreatePromoInput!): Promo!
     createRoom(input: CreateRoomInput!): Room!
 
     """
@@ -656,6 +973,11 @@ type Mutation {
     Cancels a booking. Returns true when deleted; NOT_FOUND error otherwise
     """
     deleteBooking(id: ID!): Boolean!
+
+    """
+    Deletes a promo no booking used. Errors: NOT_FOUND, PROMO_IN_USE (archive it)
+    """
+    deletePromo(id: ID!): Boolean!
 
     """
     Returns true when deleted. Errors: NOT_FOUND, ROOM_HAS_BOOKINGS (the room still has upcoming bookings)
@@ -676,6 +998,16 @@ type Mutation {
     Edit, move or reassign a booking. Same errors as createBooking
     """
     updateBooking(input: UpdateBookingInput!, id: ID!): Booking!
+
+    """
+    Rename a client or change their mobile / notes. Errors: CLIENT_MOBILE_TAKEN
+    """
+    updateClient(input: UpdateClientInput!, id: ID!): Client!
+
+    """
+    Archive / activate (isActive), edit description or period any time. Code, discount and services lock once used (PROMO_LOCKED).
+    """
+    updatePromo(input: UpdatePromoInput!, id: ID!): Promo!
     updateRoom(input: UpdateRoomInput!, id: ID!): Room!
 
     """
@@ -805,7 +1137,22 @@ input RegisterInput {
 }
 
 input CreateBookingInput {
-    client: String!
+    """
+    Any Philippine mobile format (0917 123 4567, +63 917…) or +<country code>…. Finds the client, or creates them when the number is new
+    """
+    clientMobile: String!
+
+    """
+    Required when the mobile is new
+    """
+    clientFirstName: String
+    clientLastName: String
+    isRequested: Boolean = false
+
+    """
+    One promo per booking; case doesn’t matter
+    """
+    promoCode: String
     therapistId: ID!
     roomId: ID!
 
@@ -815,6 +1162,17 @@ input CreateBookingInput {
     serviceId: ID!
     start: DateTime!
     end: DateTime!
+}
+
+input CreatePromoInput {
+    code: String!
+    description: String
+    discountType: DiscountType!
+    value: Float!
+    validFrom: String!
+    validTo: String
+    serviceIds: [ID!]
+    isActive: Boolean = true
 }
 
 input CreateRoomInput {
@@ -862,12 +1220,51 @@ input CreateTherapistInput {
 Only the fields you send are changed; the result must still pass every rule
 """
 input UpdateBookingInput {
-    client: String
+    """
+    Re-links the booking to this client
+    """
+    clientMobile: String
+
+    """
+    Used only when the mobile is new
+    """
+    clientFirstName: String
+    clientLastName: String
+    isRequested: Boolean
+
+    """
+    "" removes the promo
+    """
+    promoCode: String
     therapistId: ID
     roomId: ID
     serviceId: ID
     start: DateTime
     end: DateTime
+}
+
+"""
+Only the fields you send are changed; bookings show the new name and mobile
+"""
+input UpdateClientInput {
+    mobile: String
+    firstName: String
+    lastName: String
+    notes: String
+}
+
+"""
+Only the fields you send change; validTo: null removes the end date. Once used, code, discountType, value and serviceIds can no longer change (PROMO_LOCKED).
+"""
+input UpdatePromoInput {
+    code: String
+    description: String
+    discountType: DiscountType
+    value: Float
+    validFrom: String
+    validTo: String
+    serviceIds: [ID!]
+    isActive: Boolean
 }
 
 """

@@ -14,6 +14,16 @@ export const findBookingsStartingBetween = async ({
         start: { $gte: from, $lt: to },
         ...(endedBy ? { end: { $lte: endedBy } } : {}),
     })
-        .select({ client: 1, therapistId: 1, serviceId: 1, start: 1, end: 1 })
+        .select({
+            client: 1,
+            clientId: 1,
+            clientMobile: 1,
+            therapistId: 1,
+            serviceId: 1,
+            isRequested: 1,
+            promoId: 1,
+            start: 1,
+            end: 1,
+        })
         .sort({ start: 1, _id: 1 })
         .lean<ReportBooking[]>();

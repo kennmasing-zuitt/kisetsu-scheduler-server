@@ -48,7 +48,13 @@ export class SalesLineObject {
     @Field(() => Int)
     bookings!: number;
 
-    @Field(() => Float)
+    @Field(() => Float, { description: 'unitPrice × bookings' })
+    grossRevenue!: number;
+
+    @Field(() => Float, { description: 'Promo discounts' })
+    discounts!: number;
+
+    @Field(() => Float, { description: 'Net: grossRevenue − discounts' })
     revenue!: number;
 }
 
@@ -81,11 +87,23 @@ export class TherapistSalesObject {
     @Field(() => Int)
     minutes!: number;
 
-    @Field(() => Float)
+    @Field(() => Float, { description: 'At the prevailing prices' })
+    grossRevenue!: number;
+
+    @Field(() => Float, { description: 'Promo discounts' })
+    discounts!: number;
+
+    @Field(() => Float, { description: 'Net: grossRevenue − discounts' })
     revenue!: number;
 
     @Field(() => Int, { description: 'Bookings that added no revenue (see SalesReport.unpriced)' })
     unpriced!: number;
+
+    @Field(() => Int, { description: 'Bookings where the client asked for this therapist by name' })
+    requested!: number;
+
+    @Field(() => Float, { description: 'requested / bookings, 0–1' })
+    requestRate!: number;
 
     @Field(() => [ServiceCountObject], { description: 'Only services with at least one booking' })
     services!: ServiceCountObject[];
@@ -112,6 +130,12 @@ export class ServiceSalesObject {
     minutes!: number;
 
     @Field(() => Float)
+    grossRevenue!: number;
+
+    @Field(() => Float)
+    discounts!: number;
+
+    @Field(() => Float, { description: 'Net: grossRevenue − discounts' })
     revenue!: number;
 
     @Field(() => Int)
@@ -170,11 +194,74 @@ export class SalesTotalsObject {
     @Field(() => Int)
     minutes!: number;
 
-    @Field(() => Float)
+    @Field(() => Float, { description: 'At the prevailing prices' })
+    grossRevenue!: number;
+
+    @Field(() => Float, { description: 'Promo discounts' })
+    discounts!: number;
+
+    @Field(() => Float, { description: 'Net: grossRevenue − discounts (what was charged)' })
     revenue!: number;
 
     @Field(() => Int)
     unpriced!: number;
+
+    @Field(() => Int, { description: 'Bookings where the client asked for the therapist by name' })
+    requested!: number;
+}
+
+@ObjectType('PromoSales', { description: 'A promo code used in the period' })
+export class PromoSalesObject {
+    @Field(() => ID)
+    promoId!: string;
+
+    @Field(() => String)
+    code!: string;
+
+    @Field(() => Int)
+    bookings!: number;
+
+    @Field(() => Float, { description: 'Total discount given' })
+    discounts!: number;
+}
+
+@ObjectType('TopClient')
+export class TopClientObject {
+    @Field(() => ID)
+    clientId!: string;
+
+    @Field(() => String)
+    name!: string;
+
+    @Field(() => String)
+    mobile!: string;
+
+    @Field(() => Int, { description: 'Bookings in the period' })
+    bookings!: number;
+
+    @Field(() => Float, { description: 'Net revenue in the period' })
+    revenue!: number;
+
+    @Field(() => Int, { description: 'Visits ever (ended bookings)' })
+    totalVisits!: number;
+}
+
+@ObjectType('ClientSummary')
+export class ClientSummaryObject {
+    @Field(() => Int, { description: 'Different clients (by mobile) in the period' })
+    uniqueClients!: number;
+
+    @Field(() => Int, { description: 'Whose first booking ever is in the period' })
+    newClients!: number;
+
+    @Field(() => Int, { description: 'Who had booked before the period' })
+    returningClients!: number;
+
+    @Field(() => Int, { description: 'Bookings without a client (made before clients existed)' })
+    noClient!: number;
+
+    @Field(() => [TopClientObject], { description: 'Most bookings in the period first (up to 10)' })
+    top!: TopClientObject[];
 }
 
 @ObjectType('SalesReport')
@@ -214,4 +301,10 @@ export class SalesReportObject {
 
     @Field(() => [UnpricedBookingObject])
     unpriced!: UnpricedBookingObject[];
+
+    @Field(() => [PromoSalesObject], { description: 'Most used first' })
+    promos!: PromoSalesObject[];
+
+    @Field(() => ClientSummaryObject)
+    clients!: ClientSummaryObject;
 }

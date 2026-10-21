@@ -7,8 +7,26 @@ export class BookingObject {
     @Field(() => ID)
     id!: string;
 
-    @Field(() => String)
+    @Field(() => String, { description: "The client's name (kept in sync with the Client record)" })
     client!: string;
+
+    @Field(() => ID, {
+        nullable: true,
+        description: 'Null only for bookings made before clients existed',
+    })
+    clientId!: string | null;
+
+    @Field(() => String, { nullable: true, description: 'Canonical form, e.g. "+639171234567"' })
+    clientMobile!: string | null;
+
+    @Field(() => Boolean, { description: 'The client asked for this therapist by name' })
+    isRequested!: boolean;
+
+    @Field(() => ID, { nullable: true })
+    promoId!: string | null;
+
+    @Field(() => String, { nullable: true, description: 'The promo code applied, if any' })
+    promoCode!: string | null;
 
     @Field(() => ID)
     therapistId!: string;
@@ -52,8 +70,27 @@ export class BookingRangeArgsType {
 
 @InputType('CreateBookingInput')
 export class CreateBookingInputType {
-    @Field(() => String)
-    client!: string;
+    @Field(() => String, {
+        description:
+            'Any Philippine mobile format (0917 123 4567, +63 917…) or +<country code>…. ' +
+            'Finds the client, or creates them when the number is new',
+    })
+    clientMobile!: string;
+
+    @Field(() => String, { nullable: true, description: 'Required when the mobile is new' })
+    clientFirstName?: string;
+
+    @Field(() => String, { nullable: true })
+    clientLastName?: string;
+
+    @Field(() => Boolean, { nullable: true, defaultValue: false })
+    isRequested?: boolean;
+
+    @Field(() => String, {
+        nullable: true,
+        description: 'One promo per booking; case doesn’t matter',
+    })
+    promoCode?: string;
 
     @Field(() => ID)
     therapistId!: string;
@@ -75,8 +112,20 @@ export class CreateBookingInputType {
     description: 'Only the fields you send are changed; the result must still pass every rule',
 })
 export class UpdateBookingInputType {
+    @Field(() => String, { nullable: true, description: 'Re-links the booking to this client' })
+    clientMobile?: string;
+
+    @Field(() => String, { nullable: true, description: 'Used only when the mobile is new' })
+    clientFirstName?: string;
+
     @Field(() => String, { nullable: true })
-    client?: string;
+    clientLastName?: string;
+
+    @Field(() => Boolean, { nullable: true })
+    isRequested?: boolean;
+
+    @Field(() => String, { nullable: true, description: '"" removes the promo' })
+    promoCode?: string;
 
     @Field(() => ID, { nullable: true })
     therapistId?: string;
