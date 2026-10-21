@@ -2,8 +2,18 @@ import { InferSchemaType, model, Schema } from 'mongoose';
 
 export const BookingSchema = new Schema(
     {
-        /** Who the booking is for (free text: walk-ins don't have accounts) */
+        /** The client's name as shown on the calendar (kept in sync with the Client record) */
         client: { type: String, required: true, trim: true },
+        /** The client (by mobile). Bookings made before clients existed have none */
+        clientId: { type: Schema.Types.ObjectId, ref: 'Client' },
+        /** The client's mobile, canonical form (kept in sync with the Client record) */
+        clientMobile: { type: String, trim: true },
+        /** The client asked for this therapist by name */
+        isRequested: { type: Boolean, default: false },
+        /** Promo applied (one per booking); the discount is computed by reports */
+        promoId: { type: Schema.Types.ObjectId, ref: 'Promo', default: null },
+        /** The promo's code, kept for display */
+        promoCode: { type: String, default: null },
         therapistId: { type: Schema.Types.ObjectId, ref: 'Therapist', required: true },
         roomId: { type: Schema.Types.ObjectId, ref: 'Room', required: true },
         /** What was booked; priced in reports by the service's rule for the booking's date.
@@ -26,6 +36,8 @@ BookingSchema.index({ start: 1, end: 1 });
 BookingSchema.index({ therapistId: 1, start: 1 });
 BookingSchema.index({ roomId: 1, start: 1 });
 BookingSchema.index({ serviceId: 1 });
+BookingSchema.index({ clientId: 1, start: 1 });
+BookingSchema.index({ promoId: 1 });
 
 export type BookingSchemaType = InferSchemaType<typeof BookingSchema>;
 export const BookingModel = model('Booking', BookingSchema);

@@ -37,7 +37,8 @@ beforeEach(async () => {
 const gql = <T = Record<string, unknown>>(query: string, variables?: Record<string, unknown>) =>
     rawGql<T>(query, variables, bearer(token));
 
-const FIELDS = 'id client therapistId roomId serviceId start end createdAt updatedAt';
+const FIELDS =
+    'id client clientId clientMobile isRequested promoCode therapistId roomId serviceId start end createdAt updatedAt';
 
 const CREATE = `mutation ($input: CreateBookingInput!) { createBooking(input: $input) { ${FIELDS} } }`;
 const UPDATE = `mutation ($id: ID!, $input: UpdateBookingInput!) {
@@ -70,8 +71,16 @@ interface Slot {
     end?: string;
 }
 
-const input = (slot: Slot = {}) => ({
-    client: 'Mr. Cruz',
+// Each client name gets its own mobile (clients are identified by mobile)
+const mobiles = new Map<string, string>();
+const mobileFor = (name: string) => {
+    if (!mobiles.has(name)) mobiles.set(name, `0917${String(1_000_000 + mobiles.size)}`);
+    return mobiles.get(name)!;
+};
+
+const input = ({ client = 'Mr. Cruz', ...slot }: Slot = {}) => ({
+    clientMobile: mobileFor(client.trim()),
+    clientFirstName: client,
     therapistId: ana,
     roomId: room1,
     serviceId: massage,
@@ -221,11 +230,14 @@ describe('bookings module', () => {
             start: new Date(at(MON, '15:30')).toISOString(),
         });
 
-        const renamed = await gql<{ updateBooking: BookingT }>(UPDATE, {
-            id: b.id,
-            input: { client: 'Mrs. Cruz' },
-        });
-        expect(renamed.body.data!.updateBooking.client).toBe('Mrs. Cruz');
+        const requested = await gql<{ updateBooking: BookingT & { isRequested: boolean } }>(
+            UPDATE,
+            {
+                id: b.id,
+                input: { isRequested: true },
+            },
+        );
+        expect(requested.body.data!.updateBooking.isRequested).toBe(true);
     });
 
     it('updateBooking checks the merged result against other bookings', async () => {
@@ -247,7 +259,7 @@ describe('bookings module', () => {
         const empty = await gql(UPDATE, { id: second.id, input: {} });
         expect(errorCode(empty)).toBe('VALIDATION_ERROR');
 
-        const missing = await gql(UPDATE, { id: MISSING_ID, input: { client: 'X' } });
+        const missing = await gql(UPDATE, { id: MISSING_ID, input: { isRequested: true } });
         expect(errorCode(missing)).toBe('NOT_FOUND');
     });
 

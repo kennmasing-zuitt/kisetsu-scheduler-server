@@ -185,6 +185,11 @@ Defined in `src/mods/roles/db/_roles.enum.ts`:
 | `updateService`    | user  | `updateService` (prices, archive)        |
 | `deleteService`    | user  | `deleteService` (never-booked only)      |
 | `readReports`      | user  | `salesReport`                            |
+| `readClients`      | user  | `clients`, `client`, `clientBookings`    |
+| `updateClient`     | user  | `updateClient` (name, mobile, notes)     |
+| `createPromo`      | user  | `createPromo`                            |
+| `updatePromo`      | user  | `updatePromo` (incl. archive / activate) |
+| `deletePromo`      | user  | `deletePromo` (never-used only)          |
 
 **Adding a permission:** add it to `Permission` (and to `ADMIN_PERMISSIONS` or
 `USER_PERMISSIONS`), put `@Authorized(Permission.yourPerm)` on the resolver, then grant it to a
@@ -279,17 +284,78 @@ becomes invalid with no database write.
 `src/mods/schedule` (same layout as `_example`) holds therapists, rooms and bookings. Every query
 needs a signed-in user; mutations need the permission named after them.
 
-| Operation                                               | Returns       | Notes                                      |
-| ------------------------------------------------------- | ------------- | ------------------------------------------ |
-| `therapists` / `therapist(id)`                          | `Therapist`   | `{ id, name, offDays, leaveDates }`        |
-| `createTherapist(input)` / `updateTherapist(id, input)` | `Therapist`   | lists replace the stored ones              |
-| `deleteTherapist(id)`                                   | `Boolean`     | refused with upcoming bookings             |
-| `rooms` / `room(id)`                                    | `Room`        | `{ id, name, color }`                      |
-| `createRoom` / `updateRoom` / `deleteRoom`              | `Room`/`Bool` | `#RRGGBB`; delete like deleteTherapist     |
-| `bookings(from, to, therapistId?, roomId?)`             | `[Booking!]!` | overlapping `[from, to)`, max 62 days      |
-| `booking(id)`                                           | `Booking`     | `{ id, client, therapistId, roomId, ... }` |
-| `createBooking(input)` / `updateBooking(id, input)`     | `Booking`     | rules below                                |
-| `deleteBooking(id)`                                     | `Boolean`     | cancels the booking                        |
+| Operation                                               | Returns       | Notes                                  |
+| ------------------------------------------------------- | ------------- | -------------------------------------- |
+| `therapists` / `therapist(id)`                          | `Therapist`   | `{ id, name, offDays, leaveDates }`    |
+| `createTherapist(input)` / `updateTherapist(id, input)` | `Therapist`   | lists replace the stored ones          |
+| `deleteTherapist(id)`                                   | `Boolean`     | refused with upcoming bookings         |
+| `rooms` / `room(id)`                                    | `Room`        | `{ id, name, color }`                  |
+| `createRoom` / `updateRoom` / `deleteRoom`              | `Room`/`Bool` | `#RRGGBB`; delete like deleteTherapist |
+| `bookings(from, to, therapistId?, roomId?)`             | `[Booking!]!` | overlapping `[from, to)`, max 62 days  |
+| `booking(id)`                                           | `Booking`     | `{ id, client, clientMobile, ... }`    |
+| `createBooking(input)` / `updateBooking(id, input)`     | `Booking`     | rules below                            |
+| `deleteBooking(id)`                                     | `Boolean`     | cancels the booking                    |
+
+### Booking input
+
+`createBooking(input)` takes the client by **mobile number**, not by name:
+
+| Field                                                | Notes                                                              |
+| ---------------------------------------------------- | ------------------------------------------------------------------ |
+| `clientMobile`                                       | required; any PH format or international `+…` (see below)          |
+| `clientFirstName` / `clientLastName`                 | first name required only when the number is new; ignored otherwise |
+| `isRequested`                                        | the client asked for this therapist by name (default `false`)      |
+| `promoCode`                                          | optional, one per booking                                          |
+| `therapistId`, `roomId`, `serviceId`, `start`, `end` | as before                                                          |
+
+`updateBooking(id, input)` takes the same fields, all optional. Sending `clientMobile` moves the
+booking to that client (created if new); `promoCode: ""` removes the promo. A booking keeps a copy
+of the client's name and mobile (`client`, `clientMobile`) next to `clientId`, so the calendar
+doesn't need a join; `updateClient` keeps those copies in sync.
+
+**Mobile numbers** are stored in E.164 (`+639171234567`). Philippine mobiles are accepted as
+`09171234567`, `9171234567`, `639171234567`, `+639171234567`, `00639171234567`, with any spaces,
+dashes, dots or brackets. Other countries need `+` (or `00`) and the country code. A `+63` number
+that isn't a mobile (`+632…` landline) is refused (`VALIDATION_ERROR`). See `src/shared/mobile.ts`.
+
+### Clients
+
+A `Client` (`{ mobile (unique), firstName, lastName, notes }`) is created automatically the first
+time a booking uses a new mobile number; a new number without `clientFirstName` is refused
+(`VALIDATION_ERROR` "Enter the first name: this mobile number is a new client"). Each client comes
+with `stats`: `visits` (bookings that have ended), `upcoming`, `firstVisit`, `lastVisit`,
+`requested` (bookings where they asked for a therapist) and `favouriteTherapistId`.
+
+| Operation                               | Notes                                                      |
+| --------------------------------------- | ---------------------------------------------------------- |
+| `clients(search, page, pageSize)`       | name words, or 3+ digits of the mobile; `readClients`      |
+| `client(id)` / `clientByMobile(mobile)` | `null` when not found (any mobile format)                  |
+| `clientBookings(clientId, limit)`       | newest first                                               |
+| `updateClient(id, input)`               | `CLIENT_MOBILE_TAKEN` if the new number belongs to another |
+
+### Promo codes
+
+A `Promo` is `{ code, description, discountType: percent | amount, value, validFrom, validTo,
+serviceIds, isActive }` (`serviceIds: []` = every service; `validTo: null` = no end date). The
+discount is taken off the booking's price for its date: percent is rounded to the centavo, an
+amount is capped at the price. Like prices, the discount isn't stored on the booking: reports
+compute it every time from the promo and the price rule.
+
+A code applies when it exists, is active, the booking's date is inside its period and the service
+is covered, otherwise `PROMO_NOT_APPLICABLE` (e.g. "AKI100 doesn't apply to Fuyu"). The check
+runs on create, when the code changes, and when an update moves the booking to another date or
+service. Archiving a promo (`isActive: false`) stops new uses; bookings that already have it keep it.
+
+**Locked terms:** once any booking uses a promo, its `code`, `discountType`, `value` and
+`serviceIds` can't change (`PROMO_LOCKED`), so past reports don't change under you. The
+description, period and active flag stay editable. To offer different terms, create a new promo.
+`PromoObject` exposes `timesUsed` and `isLocked`.
+
+| Operation                                       | Notes                                                    |
+| ----------------------------------------------- | -------------------------------------------------------- |
+| `promos(includeArchived)` / `promo(code)`       | signed-in users                                          |
+| `createPromo(input)` / `updatePromo(id, input)` | `PROMO_CODE_TAKEN` on a duplicate code                   |
+| `deletePromo(id)`                               | only never-used promos (`PROMO_IN_USE`); archive instead |
 
 ### Services and prices
 
@@ -330,6 +396,13 @@ totals, `lines` showing each (service, length, price) combination, a chart `seri
 opening hours for daily, days for weekly/monthly, months for annual) and the bookings that
 couldn't be priced (`noService`, `noPrice`). By default only bookings that have ended count
 (services rendered); `includeUpcoming` adds the rest.
+
+Money comes as `grossRevenue` (list price), `discounts` (promos) and `revenue` (net = gross −
+discounts) on the totals, each therapist, service and line. Therapists also get `requested` and
+`requestRate` (share of their services the client asked for them by name). `promos` lists each
+code used with its bookings and discount total. `clients` gives `uniqueClients`, `newClients`
+(first ever booking falls in the period), `returningClients`, `noClient` (bookings made before
+mobiles were required) and the `top` 10 clients by bookings, with their revenue and all-time visits.
 
 **Booking rules** (`service/impl/assertBookingAllowed.ts`, checked on create and on the merged
 result of every update):
@@ -410,6 +483,7 @@ Codes: `VALIDATION_ERROR` (Zod issues in `extensions.details`), `UNAUTHENTICATED
 `INVALID_CREDENTIALS`, `WRONG_PASSWORD`, `IMPERSONATION_NOT_ALLOWED`, `CANNOT_IMPERSONATE_ADMIN`,
 `CANNOT_MODIFY_SELF`, `ROLE_KEY_TAKEN`, `ROLE_IN_USE`, `SYSTEM_ROLE_LOCKED`, `NOT_FOUND`, `EMAIL_TAKEN`,
 `THERAPIST_UNAVAILABLE`, `THERAPIST_DOUBLE_BOOKED`, `ROOM_TAKEN`, `THERAPIST_HAS_BOOKINGS`, `ROOM_HAS_BOOKINGS`, `SERVICE_NAME_TAKEN`, `SERVICE_IN_USE`,
+`CLIENT_MOBILE_TAKEN`, `PROMO_NOT_APPLICABLE`, `PROMO_CODE_TAKEN`, `PROMO_LOCKED`, `PROMO_IN_USE`,
 `CONFLICT`, `INVALID_ID`, `TOO_MANY_REQUESTS`, `INTERNAL_SERVER_ERROR` (message hidden in
 production), plus Apollo's own `GRAPHQL_VALIDATION_FAILED`, `BAD_USER_INPUT`, `GRAPHQL_PARSE_FAILED`.
 

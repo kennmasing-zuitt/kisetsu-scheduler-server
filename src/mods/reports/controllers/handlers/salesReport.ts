@@ -13,7 +13,8 @@ export class SalesReportHandler {
         description:
             'Daily, weekly, monthly or annual sales: services rendered per therapist and per ' +
             'service, ' +
-            'each booking priced at the price that prevailed on its date. Requires readReports.',
+            'each booking priced at the price that prevailed on its date, less its promo discount. ' +
+            'Requires readReports.',
     })
     async salesReport(
         @Args(() => SalesReportArgsType) args: SalesReportArgsType,

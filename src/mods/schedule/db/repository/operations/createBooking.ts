@@ -1,5 +1,5 @@
-import type { BookingDocument, CreateBookingData } from '../../_schedule.types.js';
+import type { BookingDocument, NewBookingRecord } from '../../_schedule.types.js';
 import { BookingModel } from '../../booking.model.js';
 
-export const createBooking = async (data: CreateBookingData): Promise<BookingDocument> =>
+export const createBooking = async (data: NewBookingRecord): Promise<BookingDocument> =>
     BookingModel.create(data);

@@ -2,7 +2,15 @@ import { Types } from 'mongoose';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { bearer, gql } from '../../../tests/graphql.helpers.js';
 import { createAdmin, registerTestUser } from '../../auth/tests/auth.helpers.js';
-import { BookingModel, RoomModel, ServiceModel, TherapistModel } from '../../schedule/index.js';
+import {
+    BookingModel,
+    ClientModel,
+    DiscountType,
+    PromoModel,
+    RoomModel,
+    ServiceModel,
+    TherapistModel,
+} from '../../schedule/index.js';
 
 // Times are in the default SCHEDULE_TIMEZONE, Asia/Manila (UTC+8).
 // 2025-12-29 is a Monday, so the week of 2026-01-01 runs Mon 2025-12-29 to Sun 2026-01-04.
@@ -281,5 +289,183 @@ describe('sales report', () => {
 
         const bad = await gql(REPORT, { period: 'weekly', date: '2026-02-30' }, bearer(admin));
         expect(bad.body.errors?.[0].extensions?.code).toBe('VALIDATION_ERROR');
+    });
+});
+
+interface MoneyT {
+    grossRevenue: number;
+    discounts: number;
+    revenue: number;
+}
+interface MoneyReportT {
+    totals: MoneyT & { bookings: number; requested: number };
+    therapists: (MoneyT & {
+        therapistName: string;
+        bookings: number;
+        requested: number;
+        requestRate: number;
+        lines: (MoneyT & { durationMin: number; unitPrice: number; bookings: number })[];
+    })[];
+    series: { key: string; revenue: number }[];
+    promos: { code: string; bookings: number; discounts: number }[];
+    clients: { noClient: number } & Record<string, unknown>;
+}
+
+const MONEY_REPORT = `query ($date: String!) {
+    salesReport(period: weekly, date: $date) {
+        totals { bookings grossRevenue discounts revenue requested }
+        therapists {
+            therapistName bookings requested requestRate grossRevenue discounts revenue
+            lines { durationMin unitPrice bookings grossRevenue discounts revenue }
+        }
+        series { key revenue }
+        promos { code bookings discounts }
+        clients { uniqueClients newClients returningClients noClient top { name mobile bookings revenue totalVisits } }
+    }
+}`;
+
+describe('sales report: promos, requests and clients', () => {
+    it('net revenue = gross − promo discounts; request rates; new vs returning clients', async () => {
+        const anaId = (await TherapistModel.findOne({ name: 'Ana' }))!._id;
+        const benId = (await TherapistModel.findOne({ name: 'Ben' }))!._id;
+        const roomId = (await RoomModel.findOne())!._id;
+        const aki = (await ServiceModel.findOne({ name: 'Aki' }))!._id;
+        const pct10 = await PromoModel.create({
+            code: 'PCT10',
+            discountType: DiscountType.percent,
+            value: 10,
+            validFrom: '2026-01-01',
+        });
+        const off200 = await PromoModel.create({
+            code: 'PHP200',
+            discountType: DiscountType.amount,
+            value: 200,
+            validFrom: '2026-01-01',
+        });
+        const juan = await ClientModel.create({ mobile: '+639171111111', firstName: 'Juan' });
+        const maria = await ClientModel.create({ mobile: '+639182222222', firstName: 'Maria' });
+
+        const book = (
+            client: typeof juan,
+            therapistId: Types.ObjectId,
+            serviceId: Types.ObjectId | string,
+            start: Date,
+            minutes: number,
+            extra: Record<string, unknown> = {},
+        ) =>
+            BookingModel.create({
+                client: client.firstName,
+                clientId: client._id,
+                clientMobile: client.mobile,
+                therapistId,
+                roomId,
+                serviceId,
+                start,
+                end: new Date(start.getTime() + minutes * 60_000),
+                ...extra,
+            });
+        // Juan came once before (so he's returning); the week of 2026-02-02 (Mon) to 02-08:
+        await book(juan, anaId, fuyu, at('2025-06-11', '15:00'), 60);
+        await book(juan, anaId, fuyu, at('2026-02-02', '15:00'), 60, {
+            isRequested: true,
+            promoId: pct10._id,
+            promoCode: 'PCT10',
+        }); // 1099 − 109.90
+        await book(maria, anaId, fuyu, at('2026-02-03', '15:00'), 80, {
+            promoId: off200._id,
+            promoCode: 'PHP200',
+        }); // 1199 − 200
+        await book(juan, benId, aki, at('2026-02-04', '15:00'), 60); // Wed: 699
+
+        const res = await gql<{ salesReport: MoneyReportT }>(
+            MONEY_REPORT,
+            { date: '2026-02-04' },
+            bearer(admin),
+        );
+        expect(res.body.errors).toBeUndefined();
+        const r: MoneyReportT = res.body.data!.salesReport;
+
+        expect(r.totals).toEqual({
+            bookings: 3,
+            grossRevenue: 2997,
+            discounts: 309.9,
+            revenue: 2687.1,
+            requested: 1,
+        });
+        const ana = r.therapists.find((t) => t.therapistName === 'Ana')!;
+        expect(ana).toMatchObject({
+            bookings: 2,
+            requested: 1,
+            requestRate: 0.5,
+            grossRevenue: 2298,
+            discounts: 309.9,
+            revenue: 1988.1,
+        });
+        expect(ana.lines[0]).toEqual({
+            durationMin: 60,
+            unitPrice: 1099,
+            bookings: 1,
+            grossRevenue: 1099,
+            discounts: 109.9,
+            revenue: 989.1,
+        });
+        // The chart shows net revenue
+        expect(r.series.find((b) => b.key === '2026-02-02')!.revenue).toBe(989.1);
+        expect(r.promos).toEqual([
+            { code: 'PCT10', bookings: 1, discounts: 109.9 },
+            { code: 'PHP200', bookings: 1, discounts: 200 },
+        ]);
+        expect(r.clients).toEqual({
+            uniqueClients: 2,
+            newClients: 1,
+            returningClients: 1,
+            noClient: 0,
+            top: [
+                {
+                    name: 'Juan',
+                    mobile: '+639171111111',
+                    bookings: 2,
+                    revenue: 1688.1,
+                    totalVisits: 3,
+                },
+                {
+                    name: 'Maria',
+                    mobile: '+639182222222',
+                    bookings: 1,
+                    revenue: 999,
+                    totalVisits: 1,
+                },
+            ],
+        });
+    });
+
+    it('a fixed discount never takes a booking below zero', async () => {
+        const anaId = (await TherapistModel.findOne({ name: 'Ana' }))!._id;
+        const big = await PromoModel.create({
+            code: 'FREE5000',
+            discountType: DiscountType.amount,
+            value: 5000,
+            validFrom: '2026-01-01',
+        });
+        await BookingModel.create({
+            client: 'Lucky',
+            therapistId: anaId,
+            roomId: (await RoomModel.findOne())!._id,
+            serviceId: fuyu,
+            promoId: big._id,
+            start: at('2026-02-10', '15:00'),
+            end: at('2026-02-10', '16:00'),
+        });
+        const res = await gql<{ salesReport: MoneyReportT }>(
+            MONEY_REPORT,
+            { date: '2026-02-10' },
+            bearer(admin),
+        );
+        expect(res.body.data!.salesReport.totals).toMatchObject({
+            grossRevenue: 1099,
+            discounts: 1099,
+            revenue: 0,
+        });
+        expect(res.body.data!.salesReport.clients.noClient).toBe(1);
     });
 });

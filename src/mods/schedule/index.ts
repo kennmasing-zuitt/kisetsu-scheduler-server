@@ -4,8 +4,8 @@ import { ScheduleHandlers } from './controllers/index.js';
 /**
  * Module root: the only file other modules should import from.
  * The schedule: therapists (calendar columns, weekly days off, leave), rooms, services (with
- * dated price rules), and bookings that tie a client and a service to a therapist and a room
- * for a time range. Same layout as src/mods/_example:
+ * dated price rules), clients (by mobile), promo codes, and bookings that tie a client and a
+ * service to a therapist and a room for a time range. Same layout as src/mods/_example:
  *
  *   db/                                 Mongoose models, TS types, Zod input rules (per entity)
  *   db/repository/operations/*.ts       data access, one file per operation
@@ -21,12 +21,17 @@ export * as ScheduleOperations from './db/repository/index.js';
 export * as ScheduleImpl from './service/index.js';
 export { ScheduleHandlers };
 export { BookingModel } from './db/booking.model.js';
+export { ClientModel } from './db/client.model.js';
+export { PromoModel } from './db/promo.model.js';
+export { DiscountType } from './db/_schedule.enum.js';
 export { RoomModel } from './db/room.model.js';
 export { ServiceModel } from './db/service.model.js';
 export { TherapistModel } from './db/therapist.model.js';
 export { MAX_BOOKING_MINUTES, MAX_RANGE_DAYS } from './db/booking.zod.js';
 export { DateKey } from './db/therapist.zod.js';
 export * from './dto/booking.dto.js';
+export * from './dto/client.dto.js';
+export * from './dto/promo.dto.js';
 export * from './dto/room.dto.js';
 export * from './dto/service.dto.js';
 export * from './dto/therapist.dto.js';

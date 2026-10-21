@@ -26,4 +26,20 @@ export class BookingFieldsHandler {
     serviceId(@Root() doc: Booking): string | null {
         return doc.serviceId ? String(doc.serviceId) : null;
     }
+
+    @FieldResolver(() => ID, { nullable: true })
+    clientId(@Root() doc: Booking): string | null {
+        return doc.clientId ? String(doc.clientId) : null;
+    }
+
+    @FieldResolver(() => ID, { nullable: true })
+    promoId(@Root() doc: Booking): string | null {
+        return doc.promoId ? String(doc.promoId) : null;
+    }
+
+    // Bookings made before this field existed have none
+    @FieldResolver(() => Boolean)
+    isRequested(@Root() doc: Booking): boolean {
+        return Boolean(doc.isRequested);
+    }
 }

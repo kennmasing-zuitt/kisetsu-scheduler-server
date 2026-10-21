@@ -38,6 +38,12 @@ export enum Permission {
     deleteService = 'deleteService',
     // reports
     readReports = 'readReports',
+    // clients & promos
+    readClients = 'readClients',
+    updateClient = 'updateClient',
+    createPromo = 'createPromo',
+    updatePromo = 'updatePromo',
+    deletePromo = 'deletePromo',
 }
 export const PERMISSION_VALUES = Object.values(Permission) as Permission[];
 
@@ -69,17 +75,24 @@ export const USER_PERMISSIONS: readonly Permission[] = [
     Permission.updateService,
     Permission.deleteService,
     Permission.readReports,
+    Permission.readClients,
+    Permission.updateClient,
+    Permission.createPromo,
+    Permission.updatePromo,
+    Permission.deletePromo,
 ];
 
 /**
  * What the default `user` role gets for the schedule: manage bookings and therapists' days off /
- * leave. Adding or removing therapists and rooms is granted separately (or via super admin).
+ * leave, look clients up and correct their details. Adding or removing therapists and rooms is granted separately (or via super admin).
  */
 export const DEFAULT_SCHEDULE_PERMISSIONS: readonly Permission[] = [
     Permission.updateTherapist,
     Permission.createBooking,
     Permission.updateBooking,
     Permission.deleteBooking,
+    Permission.readClients,
+    Permission.updateClient,
 ];
 
 /** System roles: always present (created on startup), can't be deleted. */
