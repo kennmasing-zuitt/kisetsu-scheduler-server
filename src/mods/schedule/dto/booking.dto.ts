@@ -1,4 +1,16 @@
-import { ArgsType, Field, ID, InputType, ObjectType } from 'type-graphql';
+import { ArgsType, Field, ID, InputType, ObjectType, registerEnumType } from 'type-graphql';
+import { BookingSource, BookingStatus, CancelReason } from '../db/_schedule.enum.js';
+
+registerEnumType(BookingStatus, { name: 'BookingStatus' });
+registerEnumType(BookingSource, {
+    name: 'BookingSource',
+    valuesConfig: {
+        staff: { description: 'Made in the scheduling app' },
+        client: { description: 'Made by the client on the booking site' },
+    },
+});
+registerEnumType(CancelReason, { name: 'CancelReason' });
+export { BookingSource, BookingStatus, CancelReason };
 
 // GraphQL shapes (what clients see). Validation rules live in db/booking.zod.ts
 
@@ -45,6 +57,18 @@ export class BookingObject {
 
     @Field(() => Date)
     end!: Date;
+
+    @Field(() => BookingStatus)
+    status!: BookingStatus;
+
+    @Field(() => BookingSource)
+    source!: BookingSource;
+
+    @Field(() => Date, { nullable: true })
+    cancelledAt!: Date | null;
+
+    @Field(() => CancelReason, { nullable: true })
+    cancelReason!: CancelReason | null;
 
     @Field(() => Date)
     createdAt!: Date;

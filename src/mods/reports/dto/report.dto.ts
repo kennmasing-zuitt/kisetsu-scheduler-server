@@ -208,6 +208,25 @@ export class SalesTotalsObject {
 
     @Field(() => Int, { description: 'Bookings where the client asked for the therapist by name' })
     requested!: number;
+
+    @Field(() => Int, { description: 'Bookings the client made on the booking site' })
+    online!: number;
+}
+
+@ObjectType('CancellationSummary', {
+    description: 'Bookings due in the period that were cancelled',
+})
+export class CancellationSummaryObject {
+    @Field(() => Int)
+    total!: number;
+
+    @Field(() => Int, { description: 'Cancelled by staff' })
+    byStaff!: number;
+
+    @Field(() => Int, {
+        description: 'Therapist became unavailable; the client was texted to rebook',
+    })
+    therapistUnavailable!: number;
 }
 
 @ObjectType('PromoSales', { description: 'A promo code used in the period' })
@@ -307,4 +326,7 @@ export class SalesReportObject {
 
     @Field(() => ClientSummaryObject)
     clients!: ClientSummaryObject;
+
+    @Field(() => CancellationSummaryObject)
+    cancellations!: CancellationSummaryObject;
 }

@@ -1,3 +1,4 @@
+import type { BookingSource } from './_schedule.enum.js';
 import { InferSchemaType, Require_id } from 'mongoose';
 import { DiscountType } from './_schedule.enum.js';
 import { BookingModel, BookingSchema } from './booking.model.js';
@@ -59,6 +60,8 @@ export interface CreateBookingData extends BookingSlot, ClientRef {
     /** Promo code as typed (case doesn't matter) */
     promoCode?: string;
     createdBy?: string;
+    /** Defaults to staff */
+    source?: BookingSource;
 }
 
 /** `promoCode: ""` removes the promo; a missing field leaves things as they are */
@@ -80,10 +83,13 @@ export interface NewBookingRecord {
     start: Date;
     end: Date;
     createdBy?: string;
+    source?: BookingSource;
 }
 
 /** Stored fields an update may change (undefined = unchanged; promo null = removed) */
-export type BookingRecordPatch = Partial<Omit<NewBookingRecord, 'createdBy'>> & { _id: string };
+export type BookingRecordPatch = Partial<Omit<NewBookingRecord, 'createdBy' | 'source'>> & {
+    _id: string;
+};
 
 /** Bookings overlapping [from, to), optionally for one therapist or room. */
 export interface BookingRange {

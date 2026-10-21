@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import { z } from 'zod';
 import { env } from '../../core/config/env.js';
@@ -68,4 +69,82 @@ export function verifyAccessToken(token: string): AccessTokenClaims {
     const parsed = ClaimsSchema.safeParse(decoded);
     if (!parsed.success) throw new UnauthenticatedError('Invalid token');
     return parsed.data;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Purpose tokens: short-lived tokens for one step of a flow (2FA challenge, 2FA setup, client
+// app setup, client session). Each purpose is signed with its own key derived from JWT_SECRET,
+// so none of them can ever pass verifyAccessToken (or each other's checks), whatever they hold.
+// ---------------------------------------------------------------------------------------------
+
+export enum TokenPurpose {
+    /** Password was right; now enter the authenticator code (loginTwoFactor) */
+    twoFactorChallenge = 'twoFactorChallenge',
+    /** Password was right but this role must set up 2FA first (setup/confirmTwoFactor) */
+    twoFactorSetup = 'twoFactorSetup',
+    /** Client proved the mobile number by SMS; may now confirm their authenticator */
+    clientAppSetup = 'clientAppSetup',
+    /** Client signed in with an authenticator code on the booking site */
+    clientSession = 'clientSession',
+}
+
+const PURPOSE_TTL: Record<TokenPurpose, string> = {
+    [TokenPurpose.twoFactorChallenge]: '5m',
+    [TokenPurpose.twoFactorSetup]: '15m',
+    [TokenPurpose.clientAppSetup]: '15m',
+    [TokenPurpose.clientSession]: '30m',
+};
+
+const purposeKey = (purpose: TokenPurpose) =>
+    createHmac('sha256', env.JWT_SECRET).update(`purpose:${purpose}`).digest();
+
+export interface PurposeClaims {
+    /** User id, or client id for client tokens */
+    sub: string;
+    /** tokenVersion (users) or app version (clients) when signed */
+    ver: number;
+    /** Extra data, e.g. the mobile number during client setup */
+    data?: Record<string, string>;
+}
+
+const PurposeClaimsSchema = z.object({
+    sub: z.string().min(1),
+    ver: z.number().int().nonnegative(),
+    pur: z.string(),
+    data: z.record(z.string(), z.string()).optional(),
+});
+
+export function signPurposeToken(
+    purpose: TokenPurpose,
+    claims: PurposeClaims,
+): { token: string; expiresAt: Date } {
+    const token = jwt.sign({ ...claims, pur: purpose }, purposeKey(purpose), {
+        algorithm: ALGORITHM,
+        expiresIn: PURPOSE_TTL[purpose] as SignOptions['expiresIn'],
+    });
+    const { exp } = jwt.decode(token) as { exp: number };
+    return { token, expiresAt: new Date(exp * 1000) };
+}
+
+/** Throws UNAUTHENTICATED with `expiredCode` when expired, `INVALID_TOKEN` otherwise. */
+export function verifyPurposeToken(
+    purpose: TokenPurpose,
+    token: string,
+    expiredCode = 'TOKEN_EXPIRED',
+): PurposeClaims {
+    let decoded: unknown;
+    try {
+        decoded = jwt.verify(token, purposeKey(purpose), { algorithms: [ALGORITHM] });
+    } catch (err) {
+        if (err instanceof jwt.TokenExpiredError) {
+            throw new UnauthenticatedError('This step expired. Please start again.', expiredCode);
+        }
+        throw new UnauthenticatedError('Invalid token', 'INVALID_TOKEN');
+    }
+    const parsed = PurposeClaimsSchema.safeParse(decoded);
+    if (!parsed.success || parsed.data.pur !== purpose) {
+        throw new UnauthenticatedError('Invalid token', 'INVALID_TOKEN');
+    }
+    const { sub, ver, data } = parsed.data;
+    return { sub, ver, data };
 }

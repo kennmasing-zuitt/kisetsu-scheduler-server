@@ -23,6 +23,7 @@ import { ReadPromosHandler } from './handlers/readPromos.js';
 import { ReadRoomsHandler } from './handlers/readRooms.js';
 import { ReadServicesHandler } from './handlers/readServices.js';
 import { ReadTherapistsHandler } from './handlers/readTherapists.js';
+import { ResetClientAppHandler } from './handlers/resetClientApp.js';
 import { RoomFieldsHandler } from './handlers/roomFields.js';
 import { ServiceFieldsHandler, ServicePriceFieldsHandler } from './handlers/serviceFields.js';
 import { TherapistFieldsHandler } from './handlers/therapistFields.js';
@@ -66,6 +67,7 @@ export const ScheduleHandlers = {
     FindClientHandler,
     ReadClientBookingsHandler,
     UpdateClientHandler,
+    ResetClientAppHandler,
     ClientFieldsHandler,
     // Promos
     ReadPromosHandler,

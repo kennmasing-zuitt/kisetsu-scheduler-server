@@ -52,6 +52,12 @@ export class ClientObject {
     @Field(() => ClientStatsObject)
     stats!: ClientStatsObject;
 
+    @Field(() => Date, {
+        nullable: true,
+        description: 'When the client set up app sign-in for the booking site; null if not set up',
+    })
+    appEnabledAt!: Date | null;
+
     @Field(() => Date)
     createdAt!: Date;
 

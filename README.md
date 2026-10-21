@@ -42,7 +42,8 @@ introspection.
 | `GET  /health`                       | kept as a plain liveness probe, plus `query health`           |
 | —                                    | Schedule: see [Schedule](#schedule)                           |
 
-Print the whole schema with `npm run schema:print` (or `npm run schema:print -- schema.graphql`).
+Print the whole schema with `npm run schema:print` (or `npm run schema:print -- schema.graphql booking.schema.graphql`
+to write the staff schema and the public booking API's schema).
 
 ### Example
 
@@ -82,7 +83,7 @@ JWT access tokens (HS256), sent as `Authorization: Bearer <token>`.
 | Operation               | Auth | Returns                                    | Errors                                                      |
 | ----------------------- | ---- | ------------------------------------------ | ----------------------------------------------------------- |
 | `register(input)`       | no   | `{ message, token, user }`                 | `EMAIL_TAKEN` 409, `VALIDATION_ERROR` 400                   |
-| `login(input)`          | no   | `{ token, user }`                          | `INVALID_CREDENTIALS` 401 (unknown email or wrong password) |
+| `login(input)`          | no   | `LoginPayload` (see 2FA below)             | `INVALID_CREDENTIALS` 401 (unknown email or wrong password) |
 | `me`                    | yes  | `User`                                     | `UNAUTHENTICATED` 401                                       |
 | `changePassword(input)` | yes  | `{ token, user }`                          | `WRONG_PASSWORD` 403, `VALIDATION_ERROR` 400                |
 | `logout`                | yes  | `true`                                     | `UNAUTHENTICATED` 401                                       |
@@ -132,6 +133,44 @@ mutation {
   messages.
 - `register`, `login` and `changePassword` share the auth rate limiter (failed attempts only).
 
+### Two-factor sign-in (authenticator app)
+
+Google Authenticator–style codes (TOTP, `otplib`): 6 digits, a new one every 30 seconds, one step
+of clock drift allowed either way. **Admin-kind roles must use it; for user roles it's optional.**
+
+```
+login(email, password)
+  ├─ 2FA on ─────────────► { twoFactorRequired: true, challengeToken }        (5 min)
+  │                          loginTwoFactor(challengeToken, code) ─► { token, user }
+  ├─ admin role, 2FA off ─► { twoFactorSetupRequired: true, challengeToken }  (15 min)
+  │                          setupTwoFactor(challengeToken) ─► QR
+  │                          confirmTwoFactor(code, challengeToken) ─► { token, user, recoveryCodes }
+  └─ otherwise ──────────► { token, user }
+```
+
+| Operation                                 | Auth                      | Notes                                                                |
+| ----------------------------------------- | ------------------------- | -------------------------------------------------------------------- |
+| `loginTwoFactor(challengeToken, code)`    | no                        | authenticator code **or** a recovery code                            |
+| `setupTwoFactor(challengeToken?)`         | signed in, or setup token | `{ secret, otpauthUrl, qrDataUrl }`; nothing changes until confirmed |
+| `confirmTwoFactor(code, challengeToken?)` | same                      | turns it on; returns 10 recovery codes (shown once) and a token      |
+| `disableTwoFactor(password, code)`        | signed in                 | `TWO_FACTOR_REQUIRED` 403 for admin roles                            |
+| `regenerateRecoveryCodes(code)`           | signed in                 | the old codes stop working                                           |
+| `resetUserTwoFactor(userId)`              | `resetTwoFactor`          | lost phone: 2FA off + signed out everywhere; audited                 |
+
+- **Each code works once.** The time step of the last accepted code is stored (`lastStep`) and
+  updated atomically, so a code (or an older one) can't be replayed, even by two racing requests.
+- **5 wrong codes in a row** lock 2FA for 15 minutes (`TWO_FACTOR_LOCKED` 429), on top of the
+  per-IP auth rate limiter on every 2FA mutation.
+- **Secrets are sealed** with AES-256-GCM using `TOTP_ENCRYPTION_KEY`, and `select: false`;
+  recovery codes are stored as keyed hashes. A database dump alone can't produce codes.
+- **Challenge tokens can't be used as access tokens.** Each purpose (2FA challenge, 2FA setup,
+  client app setup, client session) is signed with its own key derived from `JWT_SECRET`
+  (`shared/auth/jwt.ts`), so `verifyToken` rejects them. A logout or password change (new
+  `tokenVersion`) ends a pending challenge (`TWO_FACTOR_CHALLENGE_EXPIRED`).
+- `User.twoFactorEnabled` / `twoFactorEnabledAt` and `Session.twoFactorRequired` drive the UI.
+- **Upgrading:** existing admins (including the seeded super admin) are asked to set it up at
+  their next sign-in. Their current sessions keep working until they expire.
+
 ## Roles and permissions (RBAC)
 
 Access is role-based. A **role** is a document in the `Role` collection: a named set of
@@ -169,6 +208,7 @@ Defined in `src/mods/roles/db/_roles.enum.ts`:
 | `logoutUsers`      | admin | `logoutUser`                             |
 | `impersonateUsers` | admin | `impersonateUser`                        |
 | `readAuditLogs`    | admin | `auditLogs`                              |
+| `resetTwoFactor`   | admin | `resetUserTwoFactor`                     |
 | `createExample`    | user  | `createExample`                          |
 | `updateExample`    | user  | `updateExample`                          |
 | `deleteExample`    | user  | `deleteExample`                          |
@@ -190,6 +230,7 @@ Defined in `src/mods/roles/db/_roles.enum.ts`:
 | `createPromo`      | user  | `createPromo`                            |
 | `updatePromo`      | user  | `updatePromo` (incl. archive / activate) |
 | `deletePromo`      | user  | `deletePromo` (never-used only)          |
+| `readSmsLogs`      | user  | `smsLogs` (e.g. texts that failed)       |
 
 **Adding a permission:** add it to `Permission` (and to `ADMIN_PERMISSIONS` or
 `USER_PERMISSIONS`), put `@Authorized(Permission.yourPerm)` on the resolver, then grant it to a
@@ -284,17 +325,35 @@ becomes invalid with no database write.
 `src/mods/schedule` (same layout as `_example`) holds therapists, rooms and bookings. Every query
 needs a signed-in user; mutations need the permission named after them.
 
-| Operation                                               | Returns       | Notes                                  |
-| ------------------------------------------------------- | ------------- | -------------------------------------- |
-| `therapists` / `therapist(id)`                          | `Therapist`   | `{ id, name, offDays, leaveDates }`    |
-| `createTherapist(input)` / `updateTherapist(id, input)` | `Therapist`   | lists replace the stored ones          |
-| `deleteTherapist(id)`                                   | `Boolean`     | refused with upcoming bookings         |
-| `rooms` / `room(id)`                                    | `Room`        | `{ id, name, color }`                  |
-| `createRoom` / `updateRoom` / `deleteRoom`              | `Room`/`Bool` | `#RRGGBB`; delete like deleteTherapist |
-| `bookings(from, to, therapistId?, roomId?)`             | `[Booking!]!` | overlapping `[from, to)`, max 62 days  |
-| `booking(id)`                                           | `Booking`     | `{ id, client, clientMobile, ... }`    |
-| `createBooking(input)` / `updateBooking(id, input)`     | `Booking`     | rules below                            |
-| `deleteBooking(id)`                                     | `Boolean`     | cancels the booking                    |
+| Operation                                               | Returns       | Notes                                                      |
+| ------------------------------------------------------- | ------------- | ---------------------------------------------------------- |
+| `therapists` / `therapist(id)`                          | `Therapist`   | `{ id, name, offDays, leaveDates }`                        |
+| `createTherapist(input)` / `updateTherapist(id, input)` | `Therapist`   | lists replace the stored ones                              |
+| `deleteTherapist(id)`                                   | `Boolean`     | refused with upcoming bookings                             |
+| `rooms` / `room(id)`                                    | `Room`        | `{ id, name, color }`                                      |
+| `createRoom` / `updateRoom` / `deleteRoom`              | `Room`/`Bool` | `#RRGGBB`; delete like deleteTherapist                     |
+| `bookings(from, to, therapistId?, roomId?)`             | `[Booking!]!` | overlapping `[from, to)`, max 62 days                      |
+| `booking(id)`                                           | `Booking`     | `{ id, client, clientMobile, ... }`                        |
+| `createBooking(input)` / `updateBooking(id, input)`     | `Booking`     | rules below                                                |
+| `deleteBooking(id, notifyClient)`                       | `Boolean`     | cancels (kept, see below); `notifyClient` texts the client |
+| `therapistConflicts(id, offDays?, leaveDates?)`         | `[Booking!]!` | upcoming bookings new days off / leave would cancel        |
+
+### Cancelling, and texts when a therapist becomes unavailable
+
+Bookings are **never deleted**. `deleteBooking` sets `status: cancelled` with `cancelledAt`,
+`cancelReason` (`staff` | `therapistUnavailable`) and `cancelledBy`. A cancelled booking frees the
+therapist and room and disappears from `bookings` (the calendar), availability, visit counts,
+promo usage and revenue, but stays for history, texts and the report's cancellation count. It
+can't be edited (`BOOKING_CANCELLED` 409). Bookings stored before `status` existed count as booked.
+
+When `updateTherapist` changes `offDays` or `leaveDates`, the therapist's **upcoming bookings on
+days they no longer work are cancelled** (`therapistUnavailable`) and each client is texted:
+"Hi Juan, sorry: Ana is no longer available for your Sat, Oct 25, 3:00 PM booking at Kisetsu Spa,
+so it was cancelled. Please rebook at https://kisetsuspa.com/book or call …". Call
+`therapistConflicts` first to show staff what will be cancelled. Texts go out in the background
+and are logged (see [SMS](#sms)).
+
+Every booking also has `source`: `staff` (scheduling app) or `client` (booking site).
 
 ### Booking input
 
@@ -332,6 +391,7 @@ with `stats`: `visits` (bookings that have ended), `upcoming`, `firstVisit`, `la
 | `client(id)` / `clientByMobile(mobile)` | `null` when not found (any mobile format)                  |
 | `clientBookings(clientId, limit)`       | newest first                                               |
 | `updateClient(id, input)`               | `CLIENT_MOBILE_TAKEN` if the new number belongs to another |
+| `resetClientApp(id)`                    | lost phone: booking-site app sign-in off, sessions ended   |
 
 ### Promo codes
 
@@ -403,6 +463,9 @@ discounts) on the totals, each therapist, service and line. Therapists also get 
 code used with its bookings and discount total. `clients` gives `uniqueClients`, `newClients`
 (first ever booking falls in the period), `returningClients`, `noClient` (bookings made before
 mobiles were required) and the `top` 10 clients by bookings, with their revenue and all-time visits.
+Cancelled bookings never count as sales; `cancellations` gives how many bookings due in the
+period were cancelled (`total`, `byStaff`, `therapistUnavailable`), and `totals.online` how many
+were made by clients on the booking site.
 
 **Booking rules** (`service/impl/assertBookingAllowed.ts`, checked on create and on the merged
 result of every update):
@@ -422,6 +485,65 @@ Deleting a therapist or room is refused (`THERAPIST_HAS_BOOKINGS` / `ROOM_HAS_BO
 Weekdays, leave dates and opening hours are evaluated in `SCHEDULE_TIMEZONE` (default
 `Asia/Manila`), so they don't depend on the server's own time zone.
 
+## SMS
+
+`src/mods/sms` sends texts through the provider set by `SMS_PROVIDER`:
+
+- `console` (default): prints the text in the server log, codes included. For development.
+- `semaphore`: [semaphore.co](https://semaphore.co), sender name `SEMAPHORE_SENDER_NAME`
+  (`KISETSUSPA`; it must be approved in your Semaphore account first). Setup codes use the
+  `/otp` route (priority delivery), everything else `/messages`. Semaphore only delivers to
+  Philippine mobiles.
+
+Each text is stored in `SmsLog` (`to`, `purpose`, `message` with any code masked as ●●●●●●,
+`status` sent/failed, `attempts`, `error`, `bookingId`, `clientId`). A failed send is retried
+twice (after 1 s and 4 s) unless retrying can't help. Staff see texts with
+`smsLogs(status: failed)` (`readSmsLogs`), so they can call clients whose text didn't arrive.
+
+## Public booking API (kisetsuspa.com/book)
+
+The booking site talks to **`/booking/graphql`**, a separate endpoint with its own schema
+(`booking.schema.graphql`), CORS list (`BOOKING_CORS_ORIGINS`) and rate limits. Only the
+operations below exist there, and none of them exist on the staff `/graphql`. Staff tokens are
+rejected there; client tokens are rejected on `/graphql`. (type-graphql can only build one
+schema per process, which `core/graphql/schema.ts` splits by root field: `BOOKING_OPERATIONS`
+in `mods/booking/index.ts` lists the public ones.)
+
+**Clients sign in with an authenticator code only** (no password). They set it up once:
+
+```
+requestSetupCode(mobile, turnstileToken)          texts a 6-digit code (5 min)
+verifySetupCode(mobile, code)                     -> { setupToken, needsName, firstName, hasApp }
+startAppSetup(setupToken, firstName?, lastName?)  new number: creates the Client -> QR
+confirmAppSetup(setupToken, code)                 first app code -> { token } (signed in)
+clientLogin(mobile, code)                         later visits -> { token } (30 min)
+```
+
+| Operation                                                    | Auth   | Notes                                                          |
+| ------------------------------------------------------------ | ------ | -------------------------------------------------------------- |
+| `bookingWindow`                                              | none   | `{ today, lastDay, earliestStart, timeZone, phone }`           |
+| `bookingServices(date)`                                      | none   | active services with lengths and prices that day               |
+| `bookingTherapists`                                          | none   | first names only                                               |
+| `availableSlots(date, serviceId, durationMin, therapistId?)` | client | free starts every 30 min; therapists off that day never appear |
+| `bookAppointment(input)`                                     | client | `{ serviceId, durationMin, start, therapistId? }`              |
+
+- **Setup codes:** Cloudflare Turnstile must pass first (`BOT_CHECK_FAILED`). One code per minute
+  (`SETUP_CODE_TOO_SOON`) and 5 a day (`SETUP_CODE_LIMIT`) per number, plus 10 an hour per IP.
+  Codes are stored as keyed hashes, 3 tries each (`INVALID_SETUP_CODE`). A text that fails
+  returns `SMS_FAILED`; non-PH numbers get `SMS_UNSUPPORTED_NUMBER` with Semaphore.
+- **Sign-in:** an unknown number, a client without the app, a wrong code and a locked client all
+  get the same `INVALID_CLIENT_CODE`, so the page can't be used to find out who is a client.
+  5 wrong codes pause sign-in for 15 minutes; each code works once; 20 wrong codes per IP per
+  15 minutes. A staff `resetClientApp` (or setting up a new phone) ends existing sessions.
+- **Booking rules:** the same checks as staff bookings (`assertBookingAllowed`), plus: start at
+  least `BOOKING_MIN_LEAD_MINUTES` (120) from now and on or before today + `BOOKING_DAYS_AHEAD`
+  (7) (`OUTSIDE_BOOKING_WINDOW`), at most 3 upcoming online bookings per client
+  (`TOO_MANY_BOOKINGS`), no promo codes (front desk only). Picking a therapist sets
+  `isRequested: true`; "any" picks the least busy free therapist that day. A free room is
+  chosen. If the slot was taken meanwhile: `SLOT_TAKEN`. Cancelling is by phone with staff.
+- **Client** gains `app` (sealed secret, `lastStep`, lock, `enabledAt`, `version`); staff see
+  `Client.appEnabledAt`.
+
 ## Deploying with Docker (Droplet + shared Nginx proxy)
 
 Files: `Dockerfile` (multi-stage: build with TypeScript, run `dist/` with production
@@ -433,15 +555,36 @@ kisetsu-scheduler-client.
    `docker network create web` (skip if it exists).
 2. **Create `.env`** next to `docker-compose.yaml` (copy `.env.example`). It's read at runtime,
    never baked into the image. At least set a fresh secret:
+
     ```env
     JWT_SECRET=<node -e "console.log(require('crypto').randomBytes(48).toString('hex'))">
     AUTH_RATE_LIMIT_MAX=5
     SCHEDULE_TIMEZONE=Asia/Manila
     ```
+
     `docker-compose.yaml` always sets `NODE_ENV=production`, `PORT=2200`, `TRUST_PROXY=1`, and:
     - `MONGO_URI` → the bundled `mongo` container (data in the `mongo-data` volume).
       Set `DOCKER_MONGO_URI` in `.env` to use another database (e.g. Atlas).
-    - `CORS_ORIGINS` → `https://scheduling.masings.com`. Set `DOCKER_CORS_ORIGINS` to change it.
+    - `CORS_ORIGINS` → `https://scheduling.kisetsuspa.com` (`DOCKER_CORS_ORIGINS` to change it).
+    - `BOOKING_CORS_ORIGINS` → `https://kisetsuspa.com,https://www.kisetsuspa.com` and
+      `PUBLIC_BOOKING_URL` → `https://kisetsuspa.com/book` (`DOCKER_BOOKING_CORS_ORIGINS`,
+      `DOCKER_PUBLIC_BOOKING_URL`).
+
+    For 2FA, texts and the booking site, `.env` also needs (production refuses to start without
+    the first two):
+
+    ```env
+    TOTP_ENCRYPTION_KEY=<node -e "console.log(require('crypto').randomBytes(32).toString('base64'))">
+    TURNSTILE_SECRET_KEY=<from the Cloudflare dashboard>
+    SMS_PROVIDER=semaphore
+    SEMAPHORE_API_KEY=<from semaphore.co>
+    SEMAPHORE_SENDER_NAME=KISETSUSPA
+    SPA_PHONE=0917 123 4567
+    ```
+
+    Back `TOTP_ENCRYPTION_KEY` up with your other secrets and never change it: a new key breaks
+    every authenticator that's set up.
+
 3. **Build and start:** `docker compose up -d --build`. The API waits for MongoDB to be
    healthy, then creates the system roles on startup. Check with `docker compose ps` and
    `docker compose logs -f app`.
@@ -451,11 +594,13 @@ kisetsu-scheduler-client.
    It creates the sample accounts with **known passwords**: change them (or remove the
    accounts) right after, since the API is public.
 5. **Proxy:** copy `nginx.conf` into the proxy's `conf.d/` as `scheduling-api.conf` (serves
-   `scheduling-api.masings.com` over HTTPS with the shared `masings-apps` certificate), then
-   `docker exec <nginx-proxy> nginx -t && docker exec <nginx-proxy> nginx -s reload`.
-   Add a DNS A record for `scheduling-api.masings.com` and make sure the certificate includes it.
-6. **Client:** build kisetsu-scheduler-client with
-   `NEXT_PUBLIC_GRAPHQL_URL=https://scheduling-api.masings.com/graphql`.
+   `scheduling-api.kisetsuspa.com` over HTTPS: `/graphql` for staff, `/booking/graphql` for the
+   booking site), then `docker exec <nginx-proxy> nginx -t && docker exec <nginx-proxy> nginx -s reload`.
+   DNS and the certificate: see kisetsu-booking-client's `deploy/README.md`.
+6. **Front ends:** build kisetsu-scheduler-client with
+   `NEXT_PUBLIC_GRAPHQL_URL=https://scheduling-api.kisetsuspa.com/graphql`, and
+   kisetsu-booking-client with
+   `NEXT_PUBLIC_BOOKING_API_URL=https://scheduling-api.kisetsuspa.com/booking/graphql`.
 
 The proxy reaches the API by its network alias `kisetsu-scheduler-server:2200`. MongoDB is only
 on the project's private network, so it isn't reachable from the proxy or the internet. Apollo
@@ -484,6 +629,12 @@ Codes: `VALIDATION_ERROR` (Zod issues in `extensions.details`), `UNAUTHENTICATED
 `CANNOT_MODIFY_SELF`, `ROLE_KEY_TAKEN`, `ROLE_IN_USE`, `SYSTEM_ROLE_LOCKED`, `NOT_FOUND`, `EMAIL_TAKEN`,
 `THERAPIST_UNAVAILABLE`, `THERAPIST_DOUBLE_BOOKED`, `ROOM_TAKEN`, `THERAPIST_HAS_BOOKINGS`, `ROOM_HAS_BOOKINGS`, `SERVICE_NAME_TAKEN`, `SERVICE_IN_USE`,
 `CLIENT_MOBILE_TAKEN`, `PROMO_NOT_APPLICABLE`, `PROMO_CODE_TAKEN`, `PROMO_LOCKED`, `PROMO_IN_USE`,
+`BOOKING_CANCELLED`, `TWO_FACTOR_REQUIRED`, `INVALID_TWO_FACTOR_CODE`, `TWO_FACTOR_LOCKED`,
+`TWO_FACTOR_CHALLENGE_EXPIRED`, `TWO_FACTOR_NOT_SET_UP`, `TWO_FACTOR_ALREADY_ENABLED`,
+`INVALID_TOKEN`, and on the booking API `BOT_CHECK_FAILED`, `SETUP_CODE_TOO_SOON`,
+`SETUP_CODE_LIMIT`, `SMS_UNSUPPORTED_NUMBER`, `SMS_FAILED`, `INVALID_SETUP_CODE`,
+`APP_SETUP_EXPIRED`, `INVALID_CLIENT_CODE`, `SESSION_EXPIRED`, `OUTSIDE_BOOKING_WINDOW`,
+`SLOT_TAKEN`, `TOO_MANY_BOOKINGS`,
 `CONFLICT`, `INVALID_ID`, `TOO_MANY_REQUESTS`, `INTERNAL_SERVER_ERROR` (message hidden in
 production), plus Apollo's own `GRAPHQL_VALIDATION_FAILED`, `BAD_USER_INPUT`, `GRAPHQL_PARSE_FAILED`.
 

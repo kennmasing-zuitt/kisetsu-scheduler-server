@@ -43,6 +43,12 @@ export const UpdateTherapistInput = z
         message: 'Provide at least one field to update',
     });
 
+/** Days off / leave to try out (therapistConflicts); omitted lists keep the current ones */
+export const TherapistAvailabilityInput = z.object({
+    offDays: fields.offDays.optional(),
+    leaveDates: fields.leaveDates.optional(),
+});
+
 export const TherapistIdArgs = z.object({ id: ObjectIdSchema });
 
 export type CreateTherapistInput = z.infer<typeof CreateTherapistInput>;

@@ -1,9 +1,13 @@
 import type { ApolloServer } from '@apollo/server';
 import type { GraphQLContext } from '../graphql/context.js';
 import { logger } from '../logger.js';
+import { SmsImpl } from '../../mods/sms/index.js';
 import { disconnectDB } from './connectToMongo.js';
 
-export default function gracefulShutdown(apollo: ApolloServer<GraphQLContext>): void {
+export default function gracefulShutdown(
+    apollo: ApolloServer<GraphQLContext>,
+    bookingApollo?: ApolloServer<GraphQLContext>,
+): void {
     let shuttingDown = false;
 
     async function shutdown(signal: string) {
@@ -19,11 +23,13 @@ export default function gracefulShutdown(apollo: ApolloServer<GraphQLContext>): 
 
         try {
             // 1. Stop Apollo; the drain plugin stops new requests and waits for in-flight ones
-            await apollo.stop();
-            // 2. Close the database connection
+            await Promise.all([apollo.stop(), bookingApollo?.stop()]);
+            // 2. Let texts still being retried (e.g. rebook notices) finish
+            await SmsImpl.flushSms();
+            // 3. Close the database connection
             await disconnectDB();
             logger.info('Shutdown complete');
-            // 3. Exit cleanly
+            // 4. Exit cleanly
             process.exit(0);
         } catch (err) {
             logger.error('Error during shutdown', { error: (err as Error).message });

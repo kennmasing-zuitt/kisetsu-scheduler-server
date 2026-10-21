@@ -11,3 +11,4 @@ export * from './operations/findByIdWithPassword.js';
 export * from './operations/incrementTokenVersion.js';
 export * from './operations/setAccess.js';
 export * from './operations/updatePassword.js';
+export * from './operations/twoFactor.js';

@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { ACTIVE_BOOKING } from '../../_schedule.enum.js';
 import { BookingModel } from '../../booking.model.js';
 
 export interface ClientBookingStatsRow {
@@ -12,7 +13,7 @@ export interface ClientBookingStatsRow {
 }
 
 /**
- * Per-client counts from bookings, for many clients in two aggregations. A visit is a booking
+ * Per-client counts from active (not cancelled) bookings, for many clients in two aggregations. A visit is a booking
  * that ended by `now`; `requested` counts visits where the therapist was asked for by name.
  */
 export const clientBookingStats = async (
@@ -31,7 +32,7 @@ export const clientBookingStats = async (
             lastVisit: Date | null;
             requested: number;
         }>([
-            { $match: { clientId: { $in: ids } } },
+            { $match: { clientId: { $in: ids }, ...ACTIVE_BOOKING } },
             {
                 $group: {
                     _id: '$clientId',
@@ -49,7 +50,7 @@ export const clientBookingStats = async (
         ]),
         // Visits per (client, therapist), most first: the first row per client is the favourite
         BookingModel.aggregate<{ _id: { client: Types.ObjectId; therapist: Types.ObjectId } }>([
-            { $match: { clientId: { $in: ids }, end: { $lte: now } } },
+            { $match: { clientId: { $in: ids }, end: { $lte: now }, ...ACTIVE_BOOKING } },
             {
                 $group: {
                     _id: { client: '$clientId', therapist: '$therapistId' },

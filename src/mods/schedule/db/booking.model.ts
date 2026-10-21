@@ -1,4 +1,11 @@
 import { InferSchemaType, model, Schema } from 'mongoose';
+import {
+    BOOKING_SOURCE_VALUES,
+    BOOKING_STATUS_VALUES,
+    BookingSource,
+    BookingStatus,
+    CANCEL_REASON_VALUES,
+} from './_schedule.enum.js';
 
 export const BookingSchema = new Schema(
     {
@@ -21,8 +28,16 @@ export const BookingSchema = new Schema(
         serviceId: { type: Schema.Types.ObjectId, ref: 'Service' },
         start: { type: Date, required: true },
         end: { type: Date, required: true },
-        /** The user who made the booking */
+        /** The user who made the booking (none for online bookings) */
         createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
+        /** staff (scheduling app) or client (booking site) */
+        source: { type: String, enum: BOOKING_SOURCE_VALUES, default: BookingSource.staff },
+        /** Cancelled bookings stay stored but free the therapist and room */
+        status: { type: String, enum: BOOKING_STATUS_VALUES, default: BookingStatus.booked },
+        cancelledAt: { type: Date, default: null },
+        cancelReason: { type: String, enum: [...CANCEL_REASON_VALUES, null], default: null },
+        /** The user who cancelled it (none when the system did) */
+        cancelledBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     },
     {
         collection: 'Booking',
@@ -38,6 +53,7 @@ BookingSchema.index({ roomId: 1, start: 1 });
 BookingSchema.index({ serviceId: 1 });
 BookingSchema.index({ clientId: 1, start: 1 });
 BookingSchema.index({ promoId: 1 });
+BookingSchema.index({ status: 1, start: 1 });
 
 export type BookingSchemaType = InferSchemaType<typeof BookingSchema>;
 export const BookingModel = model('Booking', BookingSchema);

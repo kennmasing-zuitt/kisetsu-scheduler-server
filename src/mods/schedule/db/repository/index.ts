@@ -1,17 +1,20 @@
 // Standard Barrel Pattern: the isolated wrapper for db/repository/. Re-exports every
 // data-access operation (operations/*) so callers never import the inner files directly:
 //   import * as ScheduleOperations from '<path>/db/repository/index.js';
+export * from './operations/clientApp.js';
 export * from './operations/clientBookingStats.js';
+export * from './operations/cancelBooking.js';
 export * from './operations/countBookingsByPromo.js';
 export * from './operations/countBookingsForService.js';
 export * from './operations/countUpcomingBookings.js';
+export * from './operations/countUpcomingClientBookings.js';
 export * from './operations/createBooking.js';
 export * from './operations/createClient.js';
 export * from './operations/createPromo.js';
 export * from './operations/createRoom.js';
 export * from './operations/createService.js';
 export * from './operations/createTherapist.js';
-export * from './operations/deleteBooking.js';
+
 export * from './operations/deletePromo.js';
 export * from './operations/deleteRoom.js';
 export * from './operations/deleteService.js';
@@ -26,6 +29,7 @@ export * from './operations/findPromoById.js';
 export * from './operations/findRoomById.js';
 export * from './operations/findServiceById.js';
 export * from './operations/findTherapistById.js';
+export * from './operations/findUpcomingTherapistBookings.js';
 export * from './operations/readBookings.js';
 export * from './operations/readPromos.js';
 export * from './operations/readRooms.js';

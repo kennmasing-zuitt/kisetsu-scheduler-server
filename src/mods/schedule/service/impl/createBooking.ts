@@ -29,5 +29,6 @@ export const createBooking = async (data: CreateBookingData): Promise<BookingDoc
         start: data.start,
         end: data.end,
         createdBy: data.createdBy,
+        source: data.source,
     });
 };

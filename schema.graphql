@@ -25,43 +25,9 @@ type Query {
     role(key: String!): Role
 
     """
-    A single example, or null if it doesn't exist
+    Text messages, newest first (e.g. status: failed)
     """
-    example(id: ID!): Example
-
-    """
-    Paginated list, newest first. (was GET /api/v1/example/readExample)
-    """
-    examples(
-        page: Int = 1
-
-        """
-        Max 100
-        """
-        limit: Int = 20
-    ): ExamplePage!
-
-    """
-    Paginated list of users, newest first. Requires readUsers. (was GET /api/v1/users)
-    """
-    users(
-        page: Int = 1
-
-        """
-        Max 100
-        """
-        limit: Int = 20
-    ): UserPage!
-
-    """
-    The signed-in user (requires a Bearer token)
-    """
-    me: User!
-
-    """
-    The current user, their effective permissions, and any impersonating admin
-    """
-    session: Session!
+    smsLogs(limit: Int! = 50, status: SmsStatus): [SmsLog!]!
 
     """
     A single booking, or null if it doesn't exist
@@ -172,6 +138,50 @@ type Query {
     therapists: [Therapist!]!
 
     """
+    Upcoming bookings that would be cancelled if the therapist had these days off / leave dates (omitted lists keep the current ones). Ask before saving.
+    """
+    therapistConflicts(leaveDates: [String!], offDays: [Int!], id: ID!): [Booking!]!
+
+    """
+    A single example, or null if it doesn't exist
+    """
+    example(id: ID!): Example
+
+    """
+    Paginated list, newest first. (was GET /api/v1/example/readExample)
+    """
+    examples(
+        page: Int = 1
+
+        """
+        Max 100
+        """
+        limit: Int = 20
+    ): ExamplePage!
+
+    """
+    Paginated list of users, newest first. Requires readUsers. (was GET /api/v1/users)
+    """
+    users(
+        page: Int = 1
+
+        """
+        Max 100
+        """
+        limit: Int = 20
+    ): UserPage!
+
+    """
+    The signed-in user (requires a Bearer token)
+    """
+    me: User!
+
+    """
+    The current user, their effective permissions, and any impersonating admin
+    """
+    session: Session!
+
+    """
     Daily, weekly, monthly or annual sales: services rendered per therapist and per service, each booking priced at the price that prevailed on its date, less its promo discount. Requires readReports.
     """
     salesReport(
@@ -232,6 +242,7 @@ enum AuditAction {
     roleCreated
     roleUpdated
     roleDeleted
+    twoFactorReset
 }
 
 """
@@ -288,6 +299,7 @@ enum Permission {
     logoutUsers
     impersonateUsers
     readAuditLogs
+    resetTwoFactor
     createExample
     updateExample
     deleteExample
@@ -309,68 +321,44 @@ enum Permission {
     createPromo
     updatePromo
     deletePromo
+    readSmsLogs
 }
 
-type Example {
+"""
+An outgoing text message and its delivery result
+"""
+type SmsLog {
     id: ID!
-    firstName: String!
-    lastName: String!
+
+    """
+    E.164 mobile number
+    """
+    to: String!
+    purpose: SmsPurpose!
+
+    """
+    The text, with any code masked
+    """
+    message: String!
+    clientId: ID
+    bookingId: ID
+    status: SmsStatus!
+    attempts: Int!
+    provider: String!
+    error: String
+    sentAt: DateTime
     createdAt: DateTime!
-    updatedAt: DateTime!
 }
 
-type ExamplePage {
-    data: [Example!]!
-    page: Int!
-    limit: Int!
-    total: Int!
-    totalPages: Int!
+enum SmsPurpose {
+    setupCode
+    rebook
 }
 
-type UserPage {
-    data: [User!]!
-    page: Int!
-    limit: Int!
-    total: Int!
-    totalPages: Int!
-}
-
-"""
-A user account
-"""
-type User {
-    id: ID!
-    name: String!
-    email: String!
-
-    """
-    The user's role and its permissions
-    """
-    role: Role!
-
-    """
-    Per-user grants on top of the role
-    """
-    extraPerms: [Permission!]!
-    createdAt: DateTime!
-    updatedAt: DateTime!
-}
-
-"""
-Who the current token belongs to and what it can do
-"""
-type Session {
-    user: User!
-
-    """
-    Permissions that actually apply (all of them for a super admin)
-    """
-    effectivePerms: [Permission!]!
-
-    """
-    Set when an admin is impersonating this user: show a banner in the UI
-    """
-    impersonatedBy: User
+enum SmsStatus {
+    sending
+    sent
+    failed
 }
 
 """
@@ -413,8 +401,34 @@ type Booking {
     serviceId: ID
     start: DateTime!
     end: DateTime!
+    status: BookingStatus!
+    source: BookingSource!
+    cancelledAt: DateTime
+    cancelReason: CancelReason
     createdAt: DateTime!
     updatedAt: DateTime!
+}
+
+enum BookingStatus {
+    booked
+    cancelled
+}
+
+enum BookingSource {
+    """
+    Made in the scheduling app
+    """
+    staff
+
+    """
+    Made by the client on the booking site
+    """
+    client
+}
+
+enum CancelReason {
+    staff
+    therapistUnavailable
 }
 
 """
@@ -432,6 +446,11 @@ type Client {
     fullName: String!
     notes: String!
     stats: ClientStats!
+
+    """
+    When the client set up app sign-in for the booking site; null if not set up
+    """
+    appEnabledAt: DateTime
     createdAt: DateTime!
     updatedAt: DateTime!
 }
@@ -608,6 +627,79 @@ enum DiscountType {
     amount
 }
 
+type Example {
+    id: ID!
+    firstName: String!
+    lastName: String!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}
+
+type ExamplePage {
+    data: [Example!]!
+    page: Int!
+    limit: Int!
+    total: Int!
+    totalPages: Int!
+}
+
+type UserPage {
+    data: [User!]!
+    page: Int!
+    limit: Int!
+    total: Int!
+    totalPages: Int!
+}
+
+"""
+A user account
+"""
+type User {
+    id: ID!
+    name: String!
+    email: String!
+
+    """
+    The user's role and its permissions
+    """
+    role: Role!
+
+    """
+    Per-user grants on top of the role
+    """
+    extraPerms: [Permission!]!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+
+    """
+    Signs in with an authenticator code too
+    """
+    twoFactorEnabled: Boolean!
+    twoFactorEnabledAt: DateTime
+}
+
+"""
+Who the current token belongs to and what it can do
+"""
+type Session {
+    user: User!
+
+    """
+    Permissions that actually apply (all of them for a super admin)
+    """
+    effectivePerms: [Permission!]!
+
+    """
+    Set when an admin is impersonating this user: show a banner in the UI
+    """
+    impersonatedBy: User
+
+    """
+    The user's role requires two-factor sign-in
+    """
+    twoFactorRequired: Boolean!
+}
+
 type SalesReport {
     period: ReportPeriod!
 
@@ -643,6 +735,7 @@ type SalesReport {
     """
     promos: [PromoSales!]!
     clients: ClientSummary!
+    cancellations: CancellationSummary!
 }
 
 """
@@ -682,6 +775,11 @@ type SalesTotals {
     Bookings where the client asked for the therapist by name
     """
     requested: Int!
+
+    """
+    Bookings the client made on the booking site
+    """
+    online: Int!
 }
 
 type TherapistSales {
@@ -876,6 +974,23 @@ type TopClient {
     totalVisits: Int!
 }
 
+"""
+Bookings due in the period that were cancelled
+"""
+type CancellationSummary {
+    total: Int!
+
+    """
+    Cancelled by staff
+    """
+    byStaff: Int!
+
+    """
+    Therapist became unavailable; the client was texted to rebook
+    """
+    therapistUnavailable: Int!
+}
+
 type Mutation {
     """
     Requires manageRoles. You can only include permissions you hold; admin roles need a super admin. Audited.
@@ -891,6 +1006,83 @@ type Mutation {
     Requires manageRoles. Changes apply to every user with the role on their next request. The super-admin role is locked. Audited.
     """
     updateRole(input: UpdateRoleInput!, key: String!): Role!
+
+    """
+    Books a therapist and a room. Errors: VALIDATION_ERROR (times, opening hours), NOT_FOUND (therapist/room), THERAPIST_UNAVAILABLE, THERAPIST_DOUBLE_BOOKED, ROOM_TAKEN
+    """
+    createBooking(input: CreateBookingInput!): Booking!
+
+    """
+    Errors: VALIDATION_ERROR, PROMO_CODE_TAKEN
+    """
+    createPromo(input: CreatePromoInput!): Promo!
+    createRoom(input: CreateRoomInput!): Room!
+
+    """
+    Adds a service with its price list. Errors: VALIDATION_ERROR, SERVICE_NAME_TAKEN
+    """
+    createService(input: CreateServiceInput!): Service!
+
+    """
+    Adds a therapist to the roster
+    """
+    createTherapist(input: CreateTherapistInput!): Therapist!
+
+    """
+    Cancels a booking: it is kept (status cancelled) but frees the therapist and room. With notifyClient the client gets a text. NOT_FOUND, or BOOKING_CANCELLED if it already was.
+    """
+    deleteBooking(notifyClient: Boolean! = false, id: ID!): Boolean!
+
+    """
+    Deletes a promo no booking used. Errors: NOT_FOUND, PROMO_IN_USE (archive it)
+    """
+    deletePromo(id: ID!): Boolean!
+
+    """
+    Returns true when deleted. Errors: NOT_FOUND, ROOM_HAS_BOOKINGS (the room still has upcoming bookings)
+    """
+    deleteRoom(id: ID!): Boolean!
+
+    """
+    Deletes a service no booking uses. Errors: NOT_FOUND, SERVICE_IN_USE (archive it instead)
+    """
+    deleteService(id: ID!): Boolean!
+
+    """
+    Returns true when deleted. Errors: NOT_FOUND, THERAPIST_HAS_BOOKINGS (the therapist still has upcoming bookings)
+    """
+    deleteTherapist(id: ID!): Boolean!
+
+    """
+    Lost phone: turns off the client's app sign-in for the booking site and ends their sessions. They set it up again on the booking site (SMS code, then QR).
+    """
+    resetClientApp(id: ID!): Client!
+
+    """
+    Edit, move or reassign a booking. Same errors as createBooking
+    """
+    updateBooking(input: UpdateBookingInput!, id: ID!): Booking!
+
+    """
+    Rename a client or change their mobile / notes. Errors: CLIENT_MOBILE_TAKEN
+    """
+    updateClient(input: UpdateClientInput!, id: ID!): Client!
+
+    """
+    Archive / activate (isActive), edit description or period any time. Code, discount and services lock once used (PROMO_LOCKED).
+    """
+    updatePromo(input: UpdatePromoInput!, id: ID!): Promo!
+    updateRoom(input: UpdateRoomInput!, id: ID!): Room!
+
+    """
+    Rename, archive (isActive: false) or replace the price list. Reports are priced from the list as it is when they run, so editing an old period corrects past reports.
+    """
+    updateService(input: UpdateServiceInput!, id: ID!): Service!
+
+    """
+    Rename a therapist or replace their weekly days off / leave dates. Upcoming bookings on days they no longer work are cancelled and the clients are texted to rebook (preview them with therapistConflicts).
+    """
+    updateTherapist(input: UpdateTherapistInput!, id: ID!): Therapist!
 
     """
     (was POST /api/v1/example/createExample)
@@ -929,9 +1121,9 @@ type Mutation {
     ): ImpersonationPayload!
 
     """
-    Exchange email + password for an access token. Unknown email and wrong password both return INVALID_CREDENTIALS (401). Rate limited per IP.
+    Exchange email + password for an access token, or for a challengeToken when two-factor sign-in is on (or required but not set up). Unknown email and wrong password both return INVALID_CREDENTIALS (401). Rate limited per IP.
     """
-    login(input: LoginInput!): AuthPayload!
+    login(input: LoginInput!): LoginPayload!
 
     """
     Revokes every token for this user on every device (increments tokenVersion). Returns true; the client should delete its stored token.
@@ -949,76 +1141,34 @@ type Mutation {
     register(input: RegisterInput!): RegisterPayload!
 
     """
-    Books a therapist and a room. Errors: VALIDATION_ERROR (times, opening hours), NOT_FOUND (therapist/room), THERAPIST_UNAVAILABLE, THERAPIST_DOUBLE_BOOKED, ROOM_TAKEN
+    Step 2 of login: the 6-digit authenticator code, or a recovery code. INVALID_TWO_FACTOR_CODE (401); 5 wrong codes lock 2FA for 15 minutes (TWO_FACTOR_LOCKED).
     """
-    createBooking(input: CreateBookingInput!): Booking!
+    loginTwoFactor(code: String!, challengeToken: String!): AuthPayload!
 
     """
-    Errors: VALIDATION_ERROR, PROMO_CODE_TAKEN
+    Starts turning 2FA on and returns the QR code. Signed in, or with the challengeToken from a login that returned twoFactorSetupRequired.
     """
-    createPromo(input: CreatePromoInput!): Promo!
-    createRoom(input: CreateRoomInput!): Room!
+    setupTwoFactor(challengeToken: String): TwoFactorSetup!
 
     """
-    Adds a service with its price list. Errors: VALIDATION_ERROR, SERVICE_NAME_TAKEN
+    Finishes turning 2FA on with the first code from the app. Returns the recovery codes (shown once) and an access token.
     """
-    createService(input: CreateServiceInput!): Service!
+    confirmTwoFactor(challengeToken: String, code: String!): TwoFactorEnabledPayload!
 
     """
-    Adds a therapist to the roster
+    Turns 2FA off (password + code). TWO_FACTOR_REQUIRED (403) for roles that require it.
     """
-    createTherapist(input: CreateTherapistInput!): Therapist!
+    disableTwoFactor(code: String!, password: String!): Boolean!
 
     """
-    Cancels a booking. Returns true when deleted; NOT_FOUND error otherwise
+    New recovery codes (the old ones stop working)
     """
-    deleteBooking(id: ID!): Boolean!
+    regenerateRecoveryCodes(code: String!): [String!]!
 
     """
-    Deletes a promo no booking used. Errors: NOT_FOUND, PROMO_IN_USE (archive it)
+    Lost phone: turns a user's 2FA off and signs them out everywhere. Only a super admin can reset an admin. Audited.
     """
-    deletePromo(id: ID!): Boolean!
-
-    """
-    Returns true when deleted. Errors: NOT_FOUND, ROOM_HAS_BOOKINGS (the room still has upcoming bookings)
-    """
-    deleteRoom(id: ID!): Boolean!
-
-    """
-    Deletes a service no booking uses. Errors: NOT_FOUND, SERVICE_IN_USE (archive it instead)
-    """
-    deleteService(id: ID!): Boolean!
-
-    """
-    Returns true when deleted. Errors: NOT_FOUND, THERAPIST_HAS_BOOKINGS (the therapist still has upcoming bookings)
-    """
-    deleteTherapist(id: ID!): Boolean!
-
-    """
-    Edit, move or reassign a booking. Same errors as createBooking
-    """
-    updateBooking(input: UpdateBookingInput!, id: ID!): Booking!
-
-    """
-    Rename a client or change their mobile / notes. Errors: CLIENT_MOBILE_TAKEN
-    """
-    updateClient(input: UpdateClientInput!, id: ID!): Client!
-
-    """
-    Archive / activate (isActive), edit description or period any time. Code, discount and services lock once used (PROMO_LOCKED).
-    """
-    updatePromo(input: UpdatePromoInput!, id: ID!): Promo!
-    updateRoom(input: UpdateRoomInput!, id: ID!): Room!
-
-    """
-    Rename, archive (isActive: false) or replace the price list. Reports are priced from the list as it is when they run, so editing an old period corrects past reports.
-    """
-    updateService(input: UpdateServiceInput!, id: ID!): Service!
-
-    """
-    Rename a therapist or replace their weekly days off / leave dates
-    """
-    updateTherapist(input: UpdateTherapistInput!, id: ID!): Therapist!
+    resetUserTwoFactor(userId: ID!): Boolean!
 }
 
 input CreateRoleInput {
@@ -1043,97 +1193,6 @@ input UpdateRoleInput {
     Replaces the existing list
     """
     perms: [Permission!]
-}
-
-input CreateExampleInput {
-    firstName: String!
-    lastName: String!
-}
-
-"""
-Only the fields you send are changed
-"""
-input UpdateExampleInput {
-    firstName: String
-    lastName: String
-}
-
-input SetUserAccessInput {
-    """
-    Role key, e.g. "user" or "support"
-    """
-    role: String!
-
-    """
-    Per-user extras on top of the role. Replaces the existing list.
-    """
-    extraPerms: [Permission!] = []
-}
-
-"""
-Send the token as `Authorization: Bearer <token>` on later requests
-"""
-type AuthPayload {
-    """
-    JWT access token (HS256), expires after JWT_EXPIRES_IN
-    """
-    token: String!
-    user: User!
-}
-
-input ChangePasswordInput {
-    currentPassword: String!
-
-    """
-    8-72 characters, different from the current one
-    """
-    newPassword: String!
-}
-
-"""
-A short-lived token that acts as `user`. Send it as `Authorization: Bearer <token>`.
-"""
-type ImpersonationPayload {
-    token: String!
-    expiresAt: DateTime!
-
-    """
-    The impersonated user
-    """
-    user: User!
-
-    """
-    The admin who started the session
-    """
-    impersonatedBy: ID!
-}
-
-input LoginInput {
-    email: String!
-    password: String!
-}
-
-type RegisterPayload {
-    """
-    JWT access token (HS256), expires after JWT_EXPIRES_IN
-    """
-    token: String!
-    user: User!
-    message: String!
-}
-
-input RegisterInput {
-    name: String!
-
-    """
-    Normalised to lowercase
-    """
-    email: String!
-
-    """
-    8-72 characters
-    """
-    password: String!
 }
 
 input CreateBookingInput {
@@ -1292,4 +1351,154 @@ input UpdateTherapistInput {
     name: String
     offDays: [Int!]
     leaveDates: [String!]
+}
+
+input CreateExampleInput {
+    firstName: String!
+    lastName: String!
+}
+
+"""
+Only the fields you send are changed
+"""
+input UpdateExampleInput {
+    firstName: String
+    lastName: String
+}
+
+input SetUserAccessInput {
+    """
+    Role key, e.g. "user" or "support"
+    """
+    role: String!
+
+    """
+    Per-user extras on top of the role. Replaces the existing list.
+    """
+    extraPerms: [Permission!] = []
+}
+
+"""
+Send the token as `Authorization: Bearer <token>` on later requests
+"""
+type AuthPayload {
+    """
+    JWT access token (HS256), expires after JWT_EXPIRES_IN
+    """
+    token: String!
+    user: User!
+}
+
+input ChangePasswordInput {
+    currentPassword: String!
+
+    """
+    8-72 characters, different from the current one
+    """
+    newPassword: String!
+}
+
+"""
+A short-lived token that acts as `user`. Send it as `Authorization: Bearer <token>`.
+"""
+type ImpersonationPayload {
+    token: String!
+    expiresAt: DateTime!
+
+    """
+    The impersonated user
+    """
+    user: User!
+
+    """
+    The admin who started the session
+    """
+    impersonatedBy: ID!
+}
+
+"""
+Either a session (`token` + `user`), or the next step: `twoFactorRequired` -> `loginTwoFactor(challengeToken, code)`; `twoFactorSetupRequired` -> `setupTwoFactor(challengeToken)` then `confirmTwoFactor(challengeToken, code)`.
+"""
+type LoginPayload {
+    """
+    Set when signed in
+    """
+    token: String
+
+    """
+    Set when signed in
+    """
+    user: User
+    twoFactorRequired: Boolean!
+
+    """
+    The role requires 2FA and it is not set up yet
+    """
+    twoFactorSetupRequired: Boolean!
+
+    """
+    Short-lived token for the next step (5 min for the code, 15 min for setup)
+    """
+    challengeToken: String
+}
+
+input LoginInput {
+    email: String!
+    password: String!
+}
+
+type RegisterPayload {
+    """
+    JWT access token (HS256), expires after JWT_EXPIRES_IN
+    """
+    token: String!
+    user: User!
+    message: String!
+}
+
+input RegisterInput {
+    name: String!
+
+    """
+    Normalised to lowercase
+    """
+    email: String!
+
+    """
+    8-72 characters
+    """
+    password: String!
+}
+
+"""
+Scan `qrDataUrl` (or type `secret`) in an authenticator app
+"""
+type TwoFactorSetup {
+    """
+    Base32 secret, for typing in by hand
+    """
+    secret: String!
+
+    """
+    otpauth:// link
+    """
+    otpauthUrl: String!
+
+    """
+    QR code as a PNG data URL
+    """
+    qrDataUrl: String!
+}
+
+type TwoFactorEnabledPayload {
+    """
+    JWT access token (HS256), expires after JWT_EXPIRES_IN
+    """
+    token: String!
+    user: User!
+
+    """
+    One-time recovery codes. Shown only now.
+    """
+    recoveryCodes: [String!]!
 }

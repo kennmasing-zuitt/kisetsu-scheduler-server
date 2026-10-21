@@ -13,6 +13,26 @@ export const ClientSchema = new Schema(
         lastName: { type: String, default: '', trim: true },
         /** Free notes for the front desk (preferences, pressure, …) */
         notes: { type: String, default: '', trim: true },
+        /**
+         * Sign-in for the public booking site with an authenticator app (no password). Set up by
+         * the client after proving the number by SMS. Secrets are sealed (TOTP_ENCRYPTION_KEY).
+         */
+        app: {
+            type: new Schema(
+                {
+                    secret: { type: String, default: null, select: false },
+                    pendingSecret: { type: String, default: null, select: false },
+                    lastStep: { type: Number, default: null },
+                    failedAttempts: { type: Number, default: 0 },
+                    lockedUntil: { type: Date, default: null },
+                    enabledAt: { type: Date, default: null },
+                    // Bumped by a reset: booking-site sessions signed before stop working
+                    version: { type: Number, default: 0 },
+                },
+                { _id: false },
+            ),
+            default: () => ({}),
+        },
     },
     {
         collection: 'Client',

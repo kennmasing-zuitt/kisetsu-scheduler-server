@@ -34,3 +34,14 @@ export const timeZone = makeValidator<string>((input) => {
     }
     return input;
 });
+
+/** 32 random bytes, base64-encoded (AES-256 key) */
+export const aesKey = makeValidator<string>((input) => {
+    if (Buffer.from(input, 'base64').length !== 32) {
+        throw new EnvError(
+            'must be 32 bytes, base64. Generate one with: ' +
+                "node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
+        );
+    }
+    return input;
+});

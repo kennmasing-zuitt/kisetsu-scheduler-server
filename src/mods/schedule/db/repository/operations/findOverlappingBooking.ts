@@ -1,4 +1,5 @@
 import type { Booking, OverlapQuery } from '../../_schedule.types.js';
+import { ACTIVE_BOOKING } from '../../_schedule.enum.js';
 import { BookingModel } from '../../booking.model.js';
 
 /**
@@ -13,6 +14,7 @@ export const findOverlappingBooking = async ({
     excludeId,
 }: OverlapQuery): Promise<Booking | null> =>
     BookingModel.findOne({
+        ...ACTIVE_BOOKING,
         ...(therapistId ? { therapistId } : {}),
         ...(roomId ? { roomId } : {}),
         ...(excludeId ? { _id: { $ne: excludeId } } : {}),

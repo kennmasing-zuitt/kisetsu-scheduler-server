@@ -15,6 +15,7 @@ const DEFAULT_USER_PERMS = [
     'deleteBooking',
     'readClients',
     'updateClient',
+    'readSmsLogs',
 ];
 
 const SET_ACCESS = /* GraphQL */ `
@@ -62,6 +63,7 @@ describe('effective permissions', () => {
             'deleteBooking',
             'readClients',
             'updateClient',
+            'readSmsLogs',
         ]);
 
         const superAdmin = await createAdmin();

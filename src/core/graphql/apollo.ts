@@ -7,9 +7,11 @@ import { env } from '../config/env.js';
 import type { GraphQLContext } from './context.js';
 import { formatError } from './formatError.js';
 import { loggingPlugin } from './loggingPlugin.js';
+import type { GraphQLSchema } from 'graphql';
 import { buildSchema } from './schema.js';
 
-export function createApolloServer(httpServer?: Server) {
+/** `schema` defaults to the staff API; the booking endpoint passes buildBookingSchema(). */
+export function createApolloServer(httpServer?: Server, schema: GraphQLSchema = buildSchema()) {
     const plugins: ApolloServerPlugin<GraphQLContext>[] = [loggingPlugin];
 
     // Lets apollo.stop() finish in-flight requests before closing the HTTP server
@@ -23,7 +25,7 @@ export function createApolloServer(httpServer?: Server) {
     );
 
     return new ApolloServer<GraphQLContext>({
-        schema: buildSchema(),
+        schema,
         introspection: !env.isProduction,
         includeStacktraceInErrorResponses: env.isDevelopment,
         formatError,

@@ -78,6 +78,7 @@ describe('query users', () => {
                     'deleteBooking',
                     'readClients',
                     'updateClient',
+                    'readSmsLogs',
                 ],
             },
             extraPerms: [],

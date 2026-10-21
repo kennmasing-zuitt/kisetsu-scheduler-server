@@ -1,0 +1,207 @@
+type Query {
+    """
+    Bookable days and the earliest start
+    """
+    bookingWindow: BookingWindow!
+
+    """
+    Services, lengths and prices on a date
+    """
+    bookingServices(date: String!): [PublicService!]!
+
+    """
+    Therapists (first names)
+    """
+    bookingTherapists: [PublicTherapist!]!
+
+    """
+    Free start times on a day (signed-in clients). Errors: OUTSIDE_BOOKING_WINDOW, VALIDATION_ERROR
+    """
+    availableSlots(therapistId: ID, durationMin: Int!, serviceId: ID!, date: String!): [Slot!]!
+
+    """
+    Liveness check that goes through the GraphQL pipeline
+    """
+    health: String!
+}
+
+"""
+Which days and times can be booked online
+"""
+type BookingWindow {
+    """
+    Today, YYYY-MM-DD (business time zone)
+    """
+    today: String!
+
+    """
+    Last bookable day, YYYY-MM-DD
+    """
+    lastDay: String!
+
+    """
+    Earliest bookable start
+    """
+    earliestStart: DateTime!
+    timeZone: String!
+
+    """
+    Phone number to call, if set
+    """
+    phone: String!
+}
+
+"""
+ISO-8601 date-time string
+"""
+scalar DateTime
+
+type PublicService {
+    id: ID!
+    name: String!
+    options: [ServiceOption!]!
+}
+
+type ServiceOption {
+    durationMin: Int!
+
+    """
+    PHP, list price that day
+    """
+    price: Float!
+}
+
+type PublicTherapist {
+    id: ID!
+
+    """
+    First name
+    """
+    name: String!
+}
+
+type Slot {
+    start: DateTime!
+    end: DateTime!
+
+    """
+    Therapists free for the whole slot
+    """
+    therapistIds: [ID!]!
+}
+
+type Mutation {
+    """
+    Texts a 6-digit code to the number. Needs a Cloudflare Turnstile token. One per minute and 5 a day per number. Errors: BOT_CHECK_FAILED, SETUP_CODE_TOO_SOON, SETUP_CODE_LIMIT, SMS_UNSUPPORTED_NUMBER, SMS_FAILED
+    """
+    requestSetupCode(turnstileToken: String!, mobile: String!): SetupCodeSent!
+
+    """
+    Checks the SMS code (3 tries). Errors: INVALID_SETUP_CODE
+    """
+    verifySetupCode(code: String!, mobile: String!): SetupCodeVerified!
+
+    """
+    Creates the client if new (firstName required), then returns the QR code
+    """
+    startAppSetup(lastName: String, firstName: String, setupToken: String!): AppEnrollment!
+
+    """
+    The first code from the app: turns app sign-in on and signs the client in
+    """
+    confirmAppSetup(code: String!, setupToken: String!): ClientSession!
+
+    """
+    Books for the signed-in client. Errors: SLOT_TAKEN, OUTSIDE_BOOKING_WINDOW, TOO_MANY_BOOKINGS, VALIDATION_ERROR
+    """
+    bookAppointment(input: AppointmentInput!): AppointmentConfirmation!
+
+    """
+    Sign in with the mobile number and the current code from the authenticator app. Any failure is INVALID_CLIENT_CODE; 5 wrong codes pause sign-in for 15 minutes.
+    """
+    clientLogin(code: String!, mobile: String!): ClientSession!
+}
+
+type SetupCodeSent {
+    """
+    Masked number the code went to, e.g. "0917 *** 4567"
+    """
+    sentTo: String!
+    expiresAt: DateTime!
+
+    """
+    When a new code may be requested
+    """
+    resendAfter: DateTime!
+}
+
+type SetupCodeVerified {
+    """
+    Proves the number for the next 15 minutes
+    """
+    setupToken: String!
+
+    """
+    New client: ask for a first name (startAppSetup)
+    """
+    needsName: Boolean!
+    firstName: String
+
+    """
+    Already set up (a new setup replaces the old phone)
+    """
+    hasApp: Boolean!
+}
+
+"""
+Scan qrDataUrl in Google Authenticator (or type secret)
+"""
+type AppEnrollment {
+    setupToken: String!
+    secret: String!
+    otpauthUrl: String!
+
+    """
+    PNG data URL
+    """
+    qrDataUrl: String!
+}
+
+"""
+Send token as `Authorization: Bearer <token>`
+"""
+type ClientSession {
+    token: String!
+    expiresAt: DateTime!
+    clientId: ID!
+    firstName: String!
+}
+
+type AppointmentConfirmation {
+    bookingId: ID!
+    start: DateTime!
+    end: DateTime!
+    serviceName: String!
+    durationMin: Int!
+    therapistName: String!
+
+    """
+    List price; promos are applied at the front desk
+    """
+    price: Float!
+}
+
+input AppointmentInput {
+    serviceId: ID!
+    durationMin: Int!
+
+    """
+    A start time from availableSlots
+    """
+    start: DateTime!
+
+    """
+    Omit for any therapist
+    """
+    therapistId: ID
+}

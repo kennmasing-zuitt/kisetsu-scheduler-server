@@ -1,4 +1,5 @@
 import { FieldResolver, ID, Resolver, Root } from 'type-graphql';
+import { BookingSource, BookingStatus } from '../../db/_schedule.enum.js';
 import type { Booking } from '../../db/_schedule.types.js';
 import { BookingObject } from '../../dto/booking.dto.js';
 
@@ -41,5 +42,15 @@ export class BookingFieldsHandler {
     @FieldResolver(() => Boolean)
     isRequested(@Root() doc: Booking): boolean {
         return Boolean(doc.isRequested);
+    }
+
+    @FieldResolver(() => BookingStatus)
+    status(@Root() doc: Booking): BookingStatus {
+        return (doc.status as BookingStatus | undefined) ?? BookingStatus.booked;
+    }
+
+    @FieldResolver(() => BookingSource)
+    source(@Root() doc: Booking): BookingSource {
+        return (doc.source as BookingSource | undefined) ?? BookingSource.staff;
     }
 }

@@ -1,4 +1,5 @@
-import { NotFoundError } from '../../../../shared/errors/AppError.js';
+import { ConflictError, NotFoundError } from '../../../../shared/errors/AppError.js';
+import { BookingStatus } from '../../db/_schedule.enum.js';
 import type { Booking, BookingRecordPatch, UpdateBookingData } from '../../db/_schedule.types.js';
 import * as ScheduleOperations from '../../db/repository/index.js';
 import { assertBookingAllowed } from './assertBookingAllowed.js';
@@ -13,6 +14,12 @@ import { findOrCreateClient } from './findOrCreateClient.js';
 export const updateBooking = async (data: UpdateBookingData): Promise<Booking> => {
     const current = await ScheduleOperations.findBookingById(data._id);
     if (!current) throw new NotFoundError('Booking not found');
+    if (current.status === BookingStatus.cancelled) {
+        throw new ConflictError(
+            'This booking was cancelled; make a new one instead',
+            'BOOKING_CANCELLED',
+        );
+    }
 
     // The rules apply to the booking as it will be after the update
     const slot = {

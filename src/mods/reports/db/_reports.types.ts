@@ -10,6 +10,8 @@ export interface ReportBooking {
     serviceId?: unknown;
     isRequested?: boolean;
     promoId?: unknown;
+    /** staff or client (online); missing on old bookings = staff */
+    source?: string | null;
     start: Date;
     end: Date;
 }
@@ -98,6 +100,17 @@ export interface SalesTotals extends Money {
     unpriced: number;
     /** Bookings where the client asked for the therapist by name */
     requested: number;
+    /** Bookings the client made on the booking site */
+    online: number;
+}
+
+/** Bookings due in the period that were cancelled instead */
+export interface CancellationSummary {
+    total: number;
+    /** Cancelled by staff (e.g. the client called) */
+    byStaff: number;
+    /** Cancelled because the therapist became unavailable (client texted to rebook) */
+    therapistUnavailable: number;
 }
 
 /** How often a promo code was used in the period and how much it gave away */
@@ -150,6 +163,7 @@ export interface SalesReport {
     unpriced: UnpricedBooking[];
     promos: PromoSales[];
     clients: ClientSummary;
+    cancellations: CancellationSummary;
 }
 
 export interface SalesReportRequest {

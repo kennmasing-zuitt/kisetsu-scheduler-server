@@ -15,4 +15,9 @@ export class ClientFieldsHandler {
     fullName(@Root() doc: ClientWithStats): string {
         return ScheduleImpl.clientFullName(doc);
     }
+
+    @FieldResolver(() => Date, { nullable: true })
+    appEnabledAt(@Root() doc: ClientWithStats): Date | null {
+        return doc.app?.enabledAt ?? null;
+    }
 }

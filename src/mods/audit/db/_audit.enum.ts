@@ -5,5 +5,6 @@ export enum AuditAction {
     roleCreated = 'roleCreated',
     roleUpdated = 'roleUpdated',
     roleDeleted = 'roleDeleted',
+    twoFactorReset = 'twoFactorReset',
 }
 export const AUDIT_ACTION_VALUES = Object.values(AuditAction) as AuditAction[];

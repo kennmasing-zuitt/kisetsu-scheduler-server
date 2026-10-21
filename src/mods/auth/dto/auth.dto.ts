@@ -85,4 +85,53 @@ export class SessionObject {
         description: 'Set when an admin is impersonating this user: show a banner in the UI',
     })
     impersonatedBy?: UserObject | null;
+
+    @Field(() => Boolean, { description: "The user's role requires two-factor sign-in" })
+    twoFactorRequired!: boolean;
+}
+
+@ObjectType('LoginPayload', {
+    description:
+        'Either a session (`token` + `user`), or the next step: `twoFactorRequired` -> ' +
+        '`loginTwoFactor(challengeToken, code)`; `twoFactorSetupRequired` -> ' +
+        '`setupTwoFactor(challengeToken)` then `confirmTwoFactor(challengeToken, code)`.',
+})
+export class LoginPayloadObject {
+    @Field(() => String, { nullable: true, description: 'Set when signed in' })
+    token?: string | null;
+
+    @Field(() => UserObject, { nullable: true, description: 'Set when signed in' })
+    user?: UserObject | null;
+
+    @Field(() => Boolean)
+    twoFactorRequired!: boolean;
+
+    @Field(() => Boolean, { description: 'The role requires 2FA and it is not set up yet' })
+    twoFactorSetupRequired!: boolean;
+
+    @Field(() => String, {
+        nullable: true,
+        description: 'Short-lived token for the next step (5 min for the code, 15 min for setup)',
+    })
+    challengeToken?: string | null;
+}
+
+@ObjectType('TwoFactorSetup', {
+    description: 'Scan `qrDataUrl` (or type `secret`) in an authenticator app',
+})
+export class TwoFactorSetupObject {
+    @Field(() => String, { description: 'Base32 secret, for typing in by hand' })
+    secret!: string;
+
+    @Field(() => String, { description: 'otpauth:// link' })
+    otpauthUrl!: string;
+
+    @Field(() => String, { description: 'QR code as a PNG data URL' })
+    qrDataUrl!: string;
+}
+
+@ObjectType('TwoFactorEnabledPayload')
+export class TwoFactorEnabledPayloadObject extends AuthPayloadObject {
+    @Field(() => [String], { description: 'One-time recovery codes. Shown only now.' })
+    recoveryCodes!: string[];
 }

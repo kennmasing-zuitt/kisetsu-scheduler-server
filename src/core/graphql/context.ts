@@ -11,6 +11,8 @@ export interface GraphQLContext {
     requestId?: string;
     /** The authenticated caller (set by the verifyToken middleware); undefined when anonymous. */
     user?: AuthUser;
+    /** The signed-in client on the public booking endpoint (/booking/graphql). */
+    bookingClient?: { id: string };
     /** Per-request role lookup (each role key is fetched at most once per request). */
     roles: RoleCache;
 }
@@ -21,6 +23,7 @@ export async function buildContext({ req, res }: ExpressContextFunctionArgument)
         res,
         requestId: requestContext.getStore()?.requestId,
         user: req.user,
+        bookingClient: req.bookingClient,
         roles: RolesImpl.createRoleCache(),
     } satisfies GraphQLContext;
 }

@@ -44,3 +44,43 @@ export const authLimiter = rateLimit({
 export const markRateLimitFailure = (res: Response) => {
     res.locals.rateLimitFailed = true;
 };
+
+// ---- Public booking endpoint (/booking/graphql) ----
+
+const graphqlTooMany = (_req: unknown, res: Response) => {
+    res.status(429).json({
+        errors: [{ message: TOO_MANY_MESSAGE, extensions: { code: 'TOO_MANY_REQUESTS' } }],
+    });
+};
+
+/** Whole booking endpoint, per IP. */
+export const bookingApiLimiter = rateLimit({
+    windowMs: 15 * 60_000,
+    limit: env.BOOKING_RATE_LIMIT_MAX,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    handler: graphqlTooMany,
+});
+
+/** Sending SMS setup codes, per IP (each text costs money). Counts every attempt. */
+export const setupCodeLimiter = rateLimit({
+    windowMs: 60 * 60_000,
+    limit: env.isProduction ? 10 : 1000,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    handler: (_req, _res, next) =>
+        next(new TooManyRequestsError('Too many codes requested from here. Try again in an hour.')),
+    validate: { singleCount: false },
+});
+
+/** Wrong codes on the booking site (sign-in, SMS code, first app code), per IP. */
+export const clientCodeLimiter = rateLimit({
+    windowMs: 15 * 60_000,
+    limit: env.isProduction ? 20 : 1000,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    skipSuccessfulRequests: true,
+    requestWasSuccessful: (_req, res) => !res.locals.rateLimitFailed,
+    handler: (_req, _res, next) => next(new TooManyRequestsError(TOO_MANY_MESSAGE)),
+    validate: { singleCount: false },
+});

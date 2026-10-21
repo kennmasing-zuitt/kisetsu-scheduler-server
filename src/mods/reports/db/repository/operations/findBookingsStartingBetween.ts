@@ -1,8 +1,8 @@
-import { BookingModel } from '../../../../schedule/index.js';
+import { ACTIVE_BOOKING, BookingModel } from '../../../../schedule/index.js';
 import type { BookingWindow, ReportBooking } from '../../_reports.types.js';
 
 /**
- * Bookings that start in [from, to), earliest first, with only the fields a report needs.
+ * Active (not cancelled) bookings that start in [from, to), earliest first, with only the fields a report needs.
  * Reports own no collection: they read the schedule's bookings.
  */
 export const findBookingsStartingBetween = async ({
@@ -11,6 +11,7 @@ export const findBookingsStartingBetween = async ({
     endedBy,
 }: BookingWindow): Promise<ReportBooking[]> =>
     BookingModel.find({
+        ...ACTIVE_BOOKING,
         start: { $gte: from, $lt: to },
         ...(endedBy ? { end: { $lte: endedBy } } : {}),
     })
@@ -22,6 +23,7 @@ export const findBookingsStartingBetween = async ({
             serviceId: 1,
             isRequested: 1,
             promoId: 1,
+            source: 1,
             start: 1,
             end: 1,
         })

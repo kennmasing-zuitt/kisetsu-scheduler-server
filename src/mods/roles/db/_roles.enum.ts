@@ -19,6 +19,7 @@ export enum Permission {
     logoutUsers = 'logoutUsers',
     impersonateUsers = 'impersonateUsers',
     readAuditLogs = 'readAuditLogs',
+    resetTwoFactor = 'resetTwoFactor',
     // ---- user permissions ----
     createExample = 'createExample',
     updateExample = 'updateExample',
@@ -44,6 +45,8 @@ export enum Permission {
     createPromo = 'createPromo',
     updatePromo = 'updatePromo',
     deletePromo = 'deletePromo',
+    // sms
+    readSmsLogs = 'readSmsLogs',
 }
 export const PERMISSION_VALUES = Object.values(Permission) as Permission[];
 
@@ -56,6 +59,7 @@ export const ADMIN_PERMISSIONS: readonly Permission[] = [
     Permission.logoutUsers,
     Permission.impersonateUsers,
     Permission.readAuditLogs,
+    Permission.resetTwoFactor,
 ];
 
 export const USER_PERMISSIONS: readonly Permission[] = [
@@ -80,11 +84,12 @@ export const USER_PERMISSIONS: readonly Permission[] = [
     Permission.createPromo,
     Permission.updatePromo,
     Permission.deletePromo,
+    Permission.readSmsLogs,
 ];
 
 /**
  * What the default `user` role gets for the schedule: manage bookings and therapists' days off /
- * leave, look clients up and correct their details. Adding or removing therapists and rooms is granted separately (or via super admin).
+ * leave, look clients up and correct their details, and see which texts failed. Adding or removing therapists and rooms is granted separately (or via super admin).
  */
 export const DEFAULT_SCHEDULE_PERMISSIONS: readonly Permission[] = [
     Permission.updateTherapist,
@@ -93,6 +98,7 @@ export const DEFAULT_SCHEDULE_PERMISSIONS: readonly Permission[] = [
     Permission.deleteBooking,
     Permission.readClients,
     Permission.updateClient,
+    Permission.readSmsLogs,
 ];
 
 /** System roles: always present (created on startup), can't be deleted. */

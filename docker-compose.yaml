@@ -16,7 +16,10 @@ services:
             # The bundled MongoDB below; set DOCKER_MONGO_URI in .env to use another one (e.g. Atlas)
             MONGO_URI: ${DOCKER_MONGO_URI:-mongodb://mongo:27017/kisetsu-scheduler}
             # Browser origins allowed to call the API (the client's public URL)
-            CORS_ORIGINS: ${DOCKER_CORS_ORIGINS:-https://scheduling.masings.com}
+            CORS_ORIGINS: ${DOCKER_CORS_ORIGINS:-https://scheduling.kisetsuspa.com}
+            # The public booking site, allowed on /booking/graphql only
+            BOOKING_CORS_ORIGINS: ${DOCKER_BOOKING_CORS_ORIGINS:-https://kisetsuspa.com,https://www.kisetsuspa.com}
+            PUBLIC_BOOKING_URL: ${DOCKER_PUBLIC_BOOKING_URL:-https://kisetsuspa.com/book}
             # One proxy (Nginx) in front: trust its X-Forwarded-For so rate limits see real IPs
             TRUST_PROXY: 1
         depends_on:

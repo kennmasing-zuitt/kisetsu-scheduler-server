@@ -6,7 +6,7 @@ import { createApp } from './app.js';
 
 export default async function startExpress() {
     const httpServer = createServer();
-    const { app, apollo } = await createApp({ httpServer });
+    const { app, apollo, bookingApollo } = await createApp({ httpServer });
     httpServer.on('request', app);
 
     await new Promise<void>((resolve, reject) => {
@@ -18,5 +18,5 @@ export default async function startExpress() {
     });
 
     logger.info(`GraphQL ready at http://localhost:${env.PORT}${GRAPHQL_PATH} [${env.NODE_ENV}]`);
-    return { httpServer, apollo };
+    return { httpServer, apollo, bookingApollo };
 }

@@ -23,7 +23,13 @@ export { ScheduleHandlers };
 export { BookingModel } from './db/booking.model.js';
 export { ClientModel } from './db/client.model.js';
 export { PromoModel } from './db/promo.model.js';
-export { DiscountType } from './db/_schedule.enum.js';
+export {
+    ACTIVE_BOOKING,
+    BookingSource,
+    BookingStatus,
+    CancelReason,
+    DiscountType,
+} from './db/_schedule.enum.js';
 export { RoomModel } from './db/room.model.js';
 export { ServiceModel } from './db/service.model.js';
 export { TherapistModel } from './db/therapist.model.js';

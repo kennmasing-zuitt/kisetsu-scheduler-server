@@ -105,7 +105,7 @@ export async function buildSalesReport(
     const from = zonedTimeToUtc(range.from, 0, tz);
     const to = zonedTimeToUtc(range.toExclusive, 0, tz);
 
-    const [bookings, roster, catalog, promoList] = await Promise.all([
+    const [bookings, roster, catalog, promoList, cancellations] = await Promise.all([
         ReportsOperations.findBookingsStartingBetween({
             from,
             to,
@@ -114,6 +114,7 @@ export async function buildSalesReport(
         ScheduleImpl.readTherapists(),
         ScheduleImpl.readServices({ includeArchived: true }),
         ScheduleOperations.readPromos({ includeArchived: true }),
+        ReportsOperations.countCancellations({ from, to }),
     ]);
 
     // Rows start from the roster and the catalog, so therapists/services with no sales show 0
@@ -157,7 +158,7 @@ export async function buildSalesReport(
     const series = new Map<string, SalesBucket>(
         range.bucketKeys.map((key) => [key, { key, bookings: 0, revenue: 0 }]),
     );
-    const totals = { bookings: 0, minutes: 0, unpriced: 0, requested: 0, ...noMoney() };
+    const totals = { bookings: 0, minutes: 0, unpriced: 0, requested: 0, online: 0, ...noMoney() };
     const unpriced: UnpricedBooking[] = [];
 
     for (const booking of bookings) {
@@ -174,6 +175,7 @@ export async function buildSalesReport(
             totals.requested += 1;
             therapist.requested += 1;
         }
+        if (booking.source === 'client') totals.online += 1;
         if (bucket) bucket.bookings += 1;
 
         // Clients: bookings without one were made before clients existed
@@ -295,6 +297,7 @@ export async function buildSalesReport(
             .map((p) => ({ ...p, discounts: round2(p.discounts) }))
             .sort((a, b) => b.bookings - a.bookings || a.code.localeCompare(b.code)),
         clients: await summarizeClients(clientRows, noClient, from, now),
+        cancellations,
     };
 }
 

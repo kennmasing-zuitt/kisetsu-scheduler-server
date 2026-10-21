@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { bearer, gql as rawGql } from '../../../tests/graphql.helpers.js';
 import { createRoleDoc, registerTestUser } from '../../auth/tests/auth.helpers.js';
 import { RoleKind } from '../../roles/index.js';
-import { RoomModel, ServiceModel, TherapistModel } from '../index.js';
+import { BookingModel, RoomModel, ServiceModel, TherapistModel } from '../index.js';
 import { UsersOperations } from '../../users/index.js';
 
 // Times are written in the default SCHEDULE_TIMEZONE (Asia/Manila, UTC+8, no DST).
@@ -263,15 +263,31 @@ describe('bookings module', () => {
         expect(errorCode(missing)).toBe('NOT_FOUND');
     });
 
-    it('deleteBooking frees the slot, then reports NOT_FOUND on a second attempt', async () => {
+    it('deleteBooking cancels (kept, slot freed); a second cancel is BOOKING_CANCELLED', async () => {
         const b = await create();
         const first = await gql<{ deleteBooking: boolean }>(DELETE, { id: b.id });
         expect(first.body.data?.deleteBooking).toBe(true);
 
         const second = await gql(DELETE, { id: b.id });
-        expect(errorCode(second)).toBe('NOT_FOUND');
+        expect(errorCode(second)).toBe('BOOKING_CANCELLED');
+        const missing = await gql(DELETE, { id: MISSING_ID });
+        expect(errorCode(missing)).toBe('NOT_FOUND');
 
-        await create(); // the same slot is free again
+        const kept = await BookingModel.findById(b.id).lean();
+        expect(kept).toMatchObject({ status: 'cancelled', cancelReason: 'staff' });
+        expect(kept?.cancelledBy).toBeTruthy();
+
+        // Hidden from the calendar, and the same slot is free again
+        const list = await gql<{ bookings: { id: string }[] }>(LIST, {
+            from: at(MON, '00:00'),
+            to: at(MON, '23:59'),
+        });
+        expect(list.body.data?.bookings.map((x: { id: string }) => x.id)).not.toContain(b.id);
+        await create();
+
+        // A cancelled booking can't be edited
+        const edit = await gql(UPDATE, { id: b.id, input: { isRequested: true } });
+        expect(errorCode(edit)).toBe('BOOKING_CANCELLED');
     });
 
     it('validates the range and ids', async () => {

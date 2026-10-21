@@ -21,4 +21,14 @@ export class UserFieldsHandler {
         if (!role) throw new NotFoundError(`Role "${user.role}" not found`);
         return role;
     }
+
+    @FieldResolver(() => Boolean, { description: 'Signs in with an authenticator code too' })
+    twoFactorEnabled(@Root() user: PublicUser): boolean {
+        return Boolean(user.twoFactor?.enabledAt);
+    }
+
+    @FieldResolver(() => Date, { nullable: true })
+    twoFactorEnabledAt(@Root() user: PublicUser): Date | null {
+        return user.twoFactor?.enabledAt ?? null;
+    }
 }

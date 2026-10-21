@@ -57,6 +57,7 @@ describe('query roles', () => {
             'deleteBooking',
             'readClients',
             'updateClient',
+            'readSmsLogs',
         ]);
         const missing = await gql<{ role: RoleT | null }>(
             '{ role(key: "nope") { key } }',

@@ -11,3 +11,4 @@ export * from './impl/incrementTokenVersion.js';
 export * from './impl/list.js';
 export * from './impl/updateUserAccess.js';
 export * from './impl/updatePassword.js';
+export * from './impl/twoFactor.js';
