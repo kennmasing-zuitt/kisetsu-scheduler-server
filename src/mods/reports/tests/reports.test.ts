@@ -131,6 +131,33 @@ async function report(
 const therapist = (r: ReportT, name: string) => r.therapists.find((t) => t.therapistName === name)!;
 
 describe('sales report', () => {
+    it('daily: one day, charted per hour of opening hours', async () => {
+        const r = await report('daily', '2026-01-02');
+        expect(r).toMatchObject({ period: 'daily', from: '2026-01-02', to: '2026-01-02' });
+        expect(r.totals).toMatchObject({ bookings: 2, revenue: 1199 + 799, unpriced: 0 });
+        // Opening hours 10:00-22:00 -> 12 hourly buckets, 10:00 to 21:00
+        expect(r.series.map((b: ReportT['series'][number]) => b.key)).toEqual(
+            Array.from({ length: 12 }, (_, i) => `2026-01-02T${String(10 + i).padStart(2, '0')}`),
+        );
+        expect(r.series.find((b: ReportT['series'][number]) => b.key === '2026-01-02T15')).toEqual({
+            key: '2026-01-02T15',
+            bookings: 2,
+            revenue: 1998,
+        });
+        expect(therapist(r, 'Ana').services).toEqual([
+            { serviceName: 'Fuyu', bookings: 1, revenue: 1199 },
+        ]);
+    });
+
+    it('daily: a booking outside opening hours still counts in the totals', async () => {
+        // The New Year booking starts at 00:30
+        const r = await report('daily', '2026-01-01');
+        expect(r.totals).toMatchObject({ bookings: 1, revenue: 1099 });
+        expect(
+            r.series.reduce((sum: number, b: ReportT['series'][number]) => sum + b.bookings, 0),
+        ).toBe(0);
+    });
+
     it('weekly: Monday to Sunday, each booking at the price of its own date', async () => {
         const r = await report('weekly', '2026-01-01');
         expect(r).toMatchObject({

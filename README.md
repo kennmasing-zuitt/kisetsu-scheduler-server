@@ -322,13 +322,14 @@ Bookings made before services existed have none and show up as unpriced in repor
 
 ### Sales reports
 
-`salesReport(period: weekly | monthly | annual, date: "YYYY-MM-DD", includeUpcoming = false)`
-(`src/mods/reports`, needs `readReports`) covers the week (Monday–Sunday), month or year that
-contains `date`. Each booking counts on the day it starts and is priced at the rule that
+`salesReport(period: daily | weekly | monthly | annual, date: "YYYY-MM-DD", includeUpcoming = false)`
+(`src/mods/reports`, needs `readReports`) covers that day, or the week (Monday–Sunday), month or
+year that contains `date`. Each booking counts on the day it starts and is priced at the rule that
 prevailed on that day. It returns totals, per-therapist service counts and revenue, per-service
-totals, `lines` showing each (service, length, price) combination, a chart `series` (days, or
-months for annual) and the bookings that couldn't be priced (`noService`, `noPrice`). By default
-only bookings that have ended count (services rendered); `includeUpcoming` adds the rest.
+totals, `lines` showing each (service, length, price) combination, a chart `series` (hours of
+opening hours for daily, days for weekly/monthly, months for annual) and the bookings that
+couldn't be priced (`noService`, `noPrice`). By default only bookings that have ended count
+(services rendered); `includeUpcoming` adds the rest.
 
 **Booking rules** (`service/impl/assertBookingAllowed.ts`, checked on create and on the merged
 result of every update):

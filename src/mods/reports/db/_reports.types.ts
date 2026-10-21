@@ -60,7 +60,8 @@ export interface ServiceSales {
 }
 
 export interface SalesBucket {
-    /** "YYYY-MM-DD" (weekly and monthly reports) or "YYYY-MM" (annual) */
+    /** "YYYY-MM-DDTHH" (daily: one bucket per hour), "YYYY-MM-DD" (weekly, monthly) or
+     *  "YYYY-MM" (annual) */
     key: string;
     bookings: number;
     revenue: number;

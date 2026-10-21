@@ -5,7 +5,9 @@ import { ReportPeriod, UnpricedReason } from '../db/_reports.enum.js';
 
 registerEnumType(ReportPeriod, {
     name: 'ReportPeriod',
-    description: 'weekly = Monday to Sunday; monthly; annual. Dates in SCHEDULE_TIMEZONE',
+    description:
+        'daily (charted per hour); weekly = Monday to Sunday; monthly; annual. ' +
+        'Dates in SCHEDULE_TIMEZONE',
 });
 registerEnumType(UnpricedReason, {
     name: 'UnpricedReason',
@@ -17,7 +19,9 @@ export class SalesReportArgsType {
     @Field(() => ReportPeriod)
     period!: ReportPeriod;
 
-    @Field(() => String, { description: 'Any day in the wanted week / month / year, "YYYY-MM-DD"' })
+    @Field(() => String, {
+        description: 'The day, or any day in the wanted week / month / year, "YYYY-MM-DD"',
+    })
     date!: string;
 
     @Field(() => Boolean, {
@@ -118,10 +122,13 @@ export class ServiceSalesObject {
 }
 
 @ObjectType('SalesBucket', {
-    description: 'One day (weekly/monthly) or month (annual) of the chart',
+    description: 'One hour (daily), day (weekly/monthly) or month (annual) of the chart',
 })
 export class SalesBucketObject {
-    @Field(() => String, { description: '"YYYY-MM-DD", or "YYYY-MM" in annual reports' })
+    @Field(() => String, {
+        description:
+            '"YYYY-MM-DDTHH" (daily), "YYYY-MM-DD" (weekly, monthly) or "YYYY-MM" (annual)',
+    })
     key!: string;
 
     @Field(() => Int)

@@ -1,5 +1,5 @@
 import { env } from '../../../../core/config/env.js';
-import { zonedParts, zonedTimeToUtc } from '../../../../shared/time.js';
+import { minutesOf, zonedParts, zonedTimeToUtc } from '../../../../shared/time.js';
 import { ScheduleImpl } from '../../../schedule/index.js';
 import { REPORT_CURRENCY, UnpricedReason } from '../../db/_reports.enum.js';
 import type {
@@ -57,7 +57,7 @@ const sortLines = (lines: Map<string, SalesLine>) =>
         );
 
 /**
- * Sales for one week, month or year, in SCHEDULE_TIMEZONE.
+ * Sales for one day, week, month or year, in SCHEDULE_TIMEZONE.
  *
  * Each booking (counted on the day it starts) is priced by its service's rule that prevailed on
  * that day, for that weekday and length (ScheduleImpl.findServicePrice). Prices are looked up
@@ -72,7 +72,10 @@ export async function buildSalesReport(
     now = new Date(),
 ): Promise<SalesReport> {
     const tz = env.SCHEDULE_TIMEZONE;
-    const range = reportRange(period, date);
+    const range = reportRange(period, date, {
+        opens: minutesOf(env.SCHEDULE_OPENING_TIME),
+        closes: minutesOf(env.SCHEDULE_CLOSING_TIME),
+    });
 
     const [bookings, roster, catalog] = await Promise.all([
         ReportsOperations.findBookingsStartingBetween({
@@ -150,7 +153,7 @@ export async function buildSalesReport(
         const local = zonedParts(booking.start, tz);
         const durationMin = Math.round((booking.end.getTime() - booking.start.getTime()) / 60_000);
         const therapist = therapistRow(String(booking.therapistId));
-        const bucket = series.get(range.bucketOf(local.dateKey));
+        const bucket = series.get(range.bucketOf(local.dateKey, local.minutes));
 
         totals.bookings += 1;
         totals.minutes += durationMin;

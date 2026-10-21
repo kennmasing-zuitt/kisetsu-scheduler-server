@@ -11,7 +11,8 @@ export class SalesReportHandler {
     @Authorized(Permission.readReports)
     @Query(() => SalesReportObject, {
         description:
-            'Weekly, monthly or annual sales: services rendered per therapist and per service, ' +
+            'Daily, weekly, monthly or annual sales: services rendered per therapist and per ' +
+            'service, ' +
             'each booking priced at the price that prevailed on its date. Requires readReports.',
     })
     async salesReport(

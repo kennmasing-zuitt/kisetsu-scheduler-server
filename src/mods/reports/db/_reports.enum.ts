@@ -1,5 +1,6 @@
 /** Report windows. Weeks run Monday to Sunday; all dates are in SCHEDULE_TIMEZONE. */
 export enum ReportPeriod {
+    daily = 'daily',
     weekly = 'weekly',
     monthly = 'monthly',
     annual = 'annual',
