@@ -5,7 +5,12 @@ import { openSecret } from '../../../../shared/otp/secretBox.js';
 import { verifyTotp } from '../../../../shared/otp/totp.js';
 import { UsersImpl } from '../../../users/index.js';
 import type { TwoFactorEnabledResult } from '../../db/_auth.types.js';
-import { hashRecoveryCodes, invalidTwoFactorCode, isTwoFactorEnabled } from './twoFactorPolicy.js';
+import {
+    assertNotLocked,
+    failTwoFactorAttempt,
+    hashRecoveryCodes,
+    isTwoFactorEnabled,
+} from './twoFactorPolicy.js';
 
 /**
  * Finishes turning 2FA on with the first code from the app. Returns 10 recovery codes (shown
@@ -24,8 +29,10 @@ export const confirmTwoFactor = async (
     const pending = user.twoFactor?.pendingSecret;
     if (!pending) throw new AppError(400, 'TWO_FACTOR_NOT_SET_UP', 'Start the setup first');
 
+    assertNotLocked(user);
+
     const step = await verifyTotp(openSecret(pending), code);
-    if (step == null) throw invalidTwoFactorCode();
+    if (step == null) throw await failTwoFactorAttempt(userId);
 
     const recoveryCodes = newRecoveryCodes();
     const updated = await UsersImpl.enableTwoFactor(

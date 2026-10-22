@@ -27,6 +27,28 @@ export const invalidTwoFactorCode = () =>
         'INVALID_TWO_FACTOR_CODE',
     );
 
+/** Throws TWO_FACTOR_LOCKED while a lock from too many wrong codes is active. */
+export function assertNotLocked(user: Pick<UserDocument, 'twoFactor'>): void {
+    const lockedUntil = user.twoFactor?.lockedUntil;
+    if (lockedUntil && lockedUntil > new Date()) {
+        throw new AppError(
+            429,
+            'TWO_FACTOR_LOCKED',
+            `Too many wrong codes. Try again after ${lockedUntil.toISOString()}.`,
+        );
+    }
+}
+
+/** Counts a wrong code towards the lock and returns the error to throw. */
+export async function failTwoFactorAttempt(userId: string): Promise<UnauthenticatedError> {
+    await UsersImpl.recordTwoFactorFailure(
+        userId,
+        MAX_FAILED_TWO_FACTOR,
+        new Date(Date.now() + TWO_FACTOR_LOCK_MINUTES * 60_000),
+    );
+    return invalidTwoFactorCode();
+}
+
 /**
  * Checks an authenticator code (6 digits) or a recovery code ("k7dm-3xq9") for a user with 2FA
  * on. Each authenticator code works once, a recovery code is used up. Wrong codes count towards a
@@ -40,13 +62,7 @@ export async function verifySecondFactor(
     if (!tf?.enabledAt || !tf.secret) {
         throw new AppError(400, 'TWO_FACTOR_NOT_SET_UP', 'Two-factor sign-in is not turned on');
     }
-    if (tf.lockedUntil && tf.lockedUntil > new Date()) {
-        throw new AppError(
-            429,
-            'TWO_FACTOR_LOCKED',
-            `Too many wrong codes. Try again after ${tf.lockedUntil.toISOString()}.`,
-        );
-    }
+    assertNotLocked(user);
 
     if (/^\d{6}$/.test(normalizeTotpCode(code))) {
         const step = await verifyTotp(openSecret(tf.secret), code, tf.lastStep);
@@ -58,12 +74,7 @@ export async function verifySecondFactor(
         if (match && (await UsersImpl.consumeRecoveryCode(user.id, match))) return 'recovery';
     }
 
-    await UsersImpl.recordTwoFactorFailure(
-        user.id,
-        MAX_FAILED_TWO_FACTOR,
-        new Date(Date.now() + TWO_FACTOR_LOCK_MINUTES * 60_000),
-    );
-    throw invalidTwoFactorCode();
+    throw await failTwoFactorAttempt(user.id);
 }
 
 /** Hashes recovery codes for storage (normalised, so "K7DM 3XQ9" matches "k7dm-3xq9"). */

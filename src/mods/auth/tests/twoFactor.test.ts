@@ -148,6 +148,15 @@ describe('two-factor sign-in (staff)', () => {
         expect(code(locked)).toBe('TWO_FACTOR_LOCKED');
     });
 
+    it('5 wrong codes while confirming setup also lock 2FA', async () => {
+        const { token } = await registerTestUser();
+        const setup = await gql<{ setupTwoFactor: { secret: string } }>(SETUP, {}, bearer(token));
+        const secret = setup.body.data!.setupTwoFactor.secret;
+        for (let i = 0; i < 5; i++) await gql(CONFIRM, { c: '000000' }, bearer(token));
+        const locked = await gql(CONFIRM, { c: await currentTotp(secret) }, bearer(token));
+        expect(code(locked)).toBe('TWO_FACTOR_LOCKED');
+    });
+
     it('a logout (tokenVersion change) ends a pending challenge', async () => {
         const { user, token } = await registerTestUser();
         const { secret } = await enable(token);
