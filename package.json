@@ -2,6 +2,8 @@
     "name": "express-typescript-graphql-boilerplate-server",
     "version": "1.0.0",
     "description": "Express 5 + TypeScript + Apollo GraphQL + MongoDB boilerplate",
+    "license": "SEE LICENSE IN LICENSE",
+    "author": "KENNETH MARVIN DE GUIA MASING <kennethmasing@gmail.com>",
     "main": "dist/server.js",
     "type": "module",
     "engines": {
@@ -29,8 +31,6 @@
         "url": "git+https://github.com/kennmasing-zuitt/express-typescript-boilerplate.git"
     },
     "keywords": [],
-    "author": "",
-    "license": "ISC",
     "dependencies": {
         "@apollo/server": "^5.5.1",
         "@as-integrations/express5": "^1.1.2",
@@ -69,5 +69,6 @@
         "typescript": "~6.0.0",
         "typescript-eslint": "^8.71.2",
         "vitest": "^5.0.4"
-    }
+    },
+    "private": true
 }

@@ -770,3 +770,7 @@ hand-written SDL.
 | `seed` / `seed:reset`         | Seed demo users (refuses in production)           |
 | `migrate:access`              | One-off: old role shapes to `role` + `extraPerms` |
 | `schema:print`                | Print the GraphQL SDL                             |
+
+## License
+
+Proprietary. Copyright (c) 2026 KENNETH MARVIN DE GUIA MASING. See [LICENSE](LICENSE).
